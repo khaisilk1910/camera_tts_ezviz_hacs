@@ -1,0 +1,28 @@
+{
+  "title": "Camera TTS EZVIZ",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Kết nối Camera TTS EZVIZ",
+        "description": "Kết nối Home Assistant với API Docker Camera TTS.",
+        "data": {
+          "base_url": "URL API Docker",
+          "api_key": "API key"
+        },
+        "data_description": {
+          "base_url": "Ví dụ: http://192.168.31.100:8124",
+          "api_key": "Phải giống API_KEY trong Stack Docker"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Không thể kết nối tới Camera TTS API",
+      "invalid_auth": "API key không đúng",
+      "invalid_url": "Hãy nhập URL http:// hoặc https:// hợp lệ",
+      "no_cameras": "API hoạt động nhưng chưa cấu hình camera"
+    },
+    "abort": {
+      "already_configured": "Camera TTS API này đã được cấu hình"
+    }
+  }
+}
