@@ -1,7 +1,7 @@
 {
   "domain": "camera_tts_ezviz",
   "name": "Camera TTS EZVIZ",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "config_flow": true,
   "integration_type": "hub",
   "iot_class": "local_polling",

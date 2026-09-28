@@ -13,16 +13,23 @@
           "base_url": "Ví dụ: http://192.168.31.100:8124",
           "api_key": "Phải giống API_KEY trong Stack Docker"
         }
+      },
+      "reauth_confirm": {
+        "title": "Kết nối lại Camera TTS EZVIZ",
+        "description": "Docker API đã từ chối API key đang lưu. Hãy nhập API key hiện tại.",
+        "data": {
+          "api_key": "API key"
+        }
       }
     },
     "error": {
       "cannot_connect": "Không thể kết nối tới Camera TTS API",
       "invalid_auth": "API key không đúng",
-      "invalid_url": "Hãy nhập URL http:// hoặc https:// hợp lệ",
-      "no_cameras": "API hoạt động nhưng chưa cấu hình camera"
+      "invalid_url": "Hãy nhập URL http:// hoặc https:// hợp lệ"
     },
     "abort": {
-      "already_configured": "Camera TTS API này đã được cấu hình"
+      "already_configured": "Camera TTS API này đã được cấu hình",
+      "reauth_successful": "Đã cập nhật xác thực thành công"
     }
   }
 }

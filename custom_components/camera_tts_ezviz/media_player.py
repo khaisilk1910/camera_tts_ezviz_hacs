@@ -1,4 +1,5 @@
 """Media player entities for Camera TTS EZVIZ."""
+
 from __future__ import annotations
 
 from pathlib import PurePosixPath
@@ -17,12 +18,17 @@ from homeassistant.components.media_player import (
 from homeassistant.components.media_player.browse_media import async_process_play_media_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .api import CameraTTSAPIError, CameraTTSAuthError
 from .coordinator import CameraTTSCoordinator
 from .const import DOMAIN
+
+# Entities do no per-entity polling; all state is shared by one coordinator.
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -54,6 +60,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
     """Expose one camera speaker as a Home Assistant media_player."""
 
     _attr_device_class = MediaPlayerDeviceClass.SPEAKER
+    _attr_has_entity_name = True
     _attr_supported_features = (
         MediaPlayerEntityFeature.PLAY_MEDIA
         | MediaPlayerEntityFeature.STOP
@@ -67,8 +74,11 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         camera_id: str,
     ) -> None:
         super().__init__(coordinator)
+        self._entry = entry
         self._camera_id = camera_id
-        self._attr_name = f"Camera TTS {camera_id}"
+        # One media_player per device, so the entity itself does not need a
+        # duplicated name. Existing entity IDs stay tied to the unique ID.
+        self._attr_name = None
         self._attr_unique_id = f"{entry.entry_id}_{camera_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.entry_id}:{camera_id}")},
@@ -79,7 +89,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
 
     @property
     def camera_data(self) -> dict[str, Any] | None:
-        """Return cached camera data from the coordinator."""
+        """Return cached camera data; never perform I/O from an entity property."""
         return (self.coordinator.data or {}).get(self._camera_id)
 
     @property
@@ -89,7 +99,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
 
     @property
     def state(self) -> MediaPlayerState:
-        """Return media player state without doing I/O."""
+        """Return cached media player state."""
         raw = (self.camera_data or {}).get("state")
         if raw == "playing":
             return MediaPlayerState.PLAYING
@@ -99,7 +109,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
 
     @property
     def media_title(self) -> str | None:
-        """Return current media title/TTS text."""
+        """Return current media title or TTS text."""
         return (self.camera_data or {}).get("media_title")
 
     @property
@@ -114,7 +124,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose useful diagnostics."""
+        """Expose lightweight diagnostics already present in coordinator data."""
         data = self.camera_data or {}
         sender = data.get("sender") or {}
         return {
@@ -131,15 +141,26 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         media_content_id: str | None = None,
     ):
         """Route the media browser to Home Assistant Media Sources."""
+
+        def audio_filter(item) -> bool:
+            content_type = str(item.media_content_type or "")
+            return (
+                not content_type
+                or content_type.startswith("audio/")
+                or content_type in {"music", "playlist"}
+            )
+
         return await media_source.async_browse_media(
             self.hass,
             media_content_id,
-            content_filter=lambda item: (
-                not item.media_content_type
-                or item.media_content_type.startswith("audio/")
-                or item.media_content_type in {"music", "playlist"}
-            ),
+            content_filter=audio_filter,
         )
+
+    def _raise_api_error(self, exc: CameraTTSAPIError) -> None:
+        """Convert backend failures to HA-friendly action errors."""
+        if isinstance(exc, CameraTTSAuthError):
+            self._entry.async_start_reauth(self.hass)
+        raise HomeAssistantError(f"Camera TTS backend error: {exc}") from exc
 
     async def async_play_media(
         self,
@@ -149,13 +170,20 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         announce: bool | None = None,
         **kwargs: Any,
     ) -> None:
-        """Play TTS text or a URL/Home Assistant media source."""
+        """Play TTS text or an HTTP/Home Assistant media source."""
         media_type_text = str(media_type).lower()
 
-        # Direct text-to-speech path. This uses Docker /say and its TTS cache.
         if media_type_text in {"tts", "text", DOMAIN}:
-            await self.coordinator.api.async_say(self._camera_id, str(media_id))
-            await self.coordinator.async_request_refresh()
+            text = str(media_id)
+            try:
+                await self.coordinator.api.async_say(self._camera_id, text)
+            except CameraTTSAPIError as exc:
+                self._raise_api_error(exc)
+            self.coordinator.async_mark_started(
+                self._camera_id,
+                kind="tts",
+                title=text,
+            )
             return
 
         original_id = str(media_id)
@@ -168,12 +196,14 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
                 self.entity_id,
             )
             media_id = async_process_play_media_url(self.hass, play_item.url)
-            resolved_type = play_item.mime_type or MediaType.MUSIC
+            resolved_type = str(play_item.mime_type or MediaType.MUSIC)
 
         media_url = str(media_id)
         parsed = urlparse(media_url)
         if parsed.scheme not in {"http", "https"}:
-            raise ValueError("Camera TTS EZVIZ requires an http/https media URL or Home Assistant Media Source")
+            raise HomeAssistantError(
+                "Camera TTS EZVIZ requires an HTTP/HTTPS media URL or Home Assistant Media Source"
+            )
 
         title = None
         extra = kwargs.get("extra")
@@ -182,19 +212,30 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         if not title:
             title = PurePosixPath(parsed.path).name or "Media"
 
-        # REPLACE/PLAY start now and clear current queue; ADD/NEXT append.
+        # ADD/NEXT append. PLAY/REPLACE starts now and clears the old queue.
         replace = enqueue not in {MediaPlayerEnqueue.ADD, MediaPlayerEnqueue.NEXT}
-        await self.coordinator.api.async_play_media(
+        try:
+            await self.coordinator.api.async_play_media(
+                self._camera_id,
+                media_url,
+                title=str(title),
+                content_type=str(resolved_type),
+                cache_key=original_id,
+                replace=replace,
+            )
+        except CameraTTSAPIError as exc:
+            self._raise_api_error(exc)
+
+        self.coordinator.async_mark_started(
             self._camera_id,
-            media_url,
+            kind="media",
             title=str(title),
-            content_type=str(resolved_type),
-            cache_key=original_id,
-            replace=replace,
         )
-        await self.coordinator.async_request_refresh()
 
     async def async_media_stop(self) -> None:
         """Stop current playback and clear this camera's queued jobs."""
-        await self.coordinator.api.async_stop(self._camera_id)
-        await self.coordinator.async_request_refresh()
+        try:
+            await self.coordinator.api.async_stop(self._camera_id)
+        except CameraTTSAPIError as exc:
+            self._raise_api_error(exc)
+        self.coordinator.async_mark_stopped(self._camera_id)

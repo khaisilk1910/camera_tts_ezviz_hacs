@@ -13,16 +13,23 @@
           "base_url": "Example: http://192.168.31.100:8124",
           "api_key": "Must match API_KEY in the Docker stack"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Camera TTS EZVIZ",
+        "description": "The Docker API rejected the saved API key. Enter the current API key.",
+        "data": {
+          "api_key": "API key"
+        }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the Camera TTS API",
       "invalid_auth": "Invalid API key",
-      "invalid_url": "Enter a valid http:// or https:// URL",
-      "no_cameras": "The API is reachable but no cameras are configured"
+      "invalid_url": "Enter a valid http:// or https:// URL"
     },
     "abort": {
-      "already_configured": "This Camera TTS API is already configured"
+      "already_configured": "This Camera TTS API is already configured",
+      "reauth_successful": "Authentication updated successfully"
     }
   }
 }
