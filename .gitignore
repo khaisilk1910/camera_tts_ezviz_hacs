@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.idea/
+.env
+secrets.yaml
+.storage/
+home-assistant_v2.db*
+*.log
+*.zip
