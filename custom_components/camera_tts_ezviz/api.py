@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 import aiohttp
@@ -54,16 +55,21 @@ class CameraTTSAPI:
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
+        url = f"{self.base_url}{path}"
+        started = time.monotonic()
         try:
             async with self._session.request(
                 method,
-                f"{self.base_url}{path}",
+                url,
                 headers=headers,
                 timeout=self._timeout(timeout_seconds),
                 **kwargs,
             ) as response:
+                elapsed = time.monotonic() - started
                 if response.status in {401, 403}:
-                    raise CameraTTSAuthError("Invalid API key")
+                    raise CameraTTSAuthError(
+                        f"{method} {path}: authentication rejected (HTTP {response.status})"
+                    )
 
                 if response.status == 204:
                     return {}
@@ -75,16 +81,39 @@ class CameraTTSAPI:
 
                 if response.status >= 400:
                     message = payload.get("error") if isinstance(payload, dict) else None
-                    raise CameraTTSAPIError(message or f"HTTP {response.status}")
+                    raise CameraTTSAPIError(
+                        f"{method} {path}: backend HTTP {response.status} after "
+                        f"{elapsed:.2f}s: {message or 'request failed'}"
+                    )
 
                 if not isinstance(payload, dict):
-                    raise CameraTTSAPIError("Unexpected API response")
+                    raise CameraTTSAPIError(
+                        f"{method} {path}: invalid non-object JSON response"
+                    )
                 return payload
 
         except (CameraTTSAuthError, CameraTTSAPIError):
             raise
-        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-            raise CameraTTSAPIError(str(exc) or exc.__class__.__name__) from exc
+        except aiohttp.ServerTimeoutError as exc:
+            elapsed = time.monotonic() - started
+            raise CameraTTSAPIError(
+                f"{method} {path}: backend connected but did not return data within "
+                f"{timeout_seconds:.1f}s (elapsed={elapsed:.2f}s)"
+            ) from exc
+        except aiohttp.ClientConnectorError as exc:
+            raise CameraTTSAPIError(
+                f"{method} {path}: cannot connect to backend {self.base_url}: {exc.os_error or exc}"
+            ) from exc
+        except asyncio.TimeoutError as exc:
+            elapsed = time.monotonic() - started
+            raise CameraTTSAPIError(
+                f"{method} {path}: request timed out after {elapsed:.2f}s "
+                f"(limit={timeout_seconds:.1f}s)"
+            ) from exc
+        except aiohttp.ClientError as exc:
+            raise CameraTTSAPIError(
+                f"{method} {path}: HTTP client error: {exc.__class__.__name__}: {exc}"
+            ) from exc
 
     async def async_cameras(self) -> list[dict[str, Any]]:
         """Return configured cameras and lightweight playback state."""

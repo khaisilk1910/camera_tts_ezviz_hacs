@@ -1,4 +1,4 @@
-# Camera TTS EZVIZ HACS v2.3.2
+# Camera TTS EZVIZ HACS v2.3.3
 
 Custom integration cho Home Assistant, kết nối tới Docker backend **Camera TTS EZVIZ** và tự tạo một `media_player` cho mỗi camera.
 
@@ -25,7 +25,7 @@ POST /media/<camera>
 POST /stop/<camera>
 ```
 
-Khuyến nghị Docker `v2.3.1` trở lên.
+Khuyến nghị Docker `v2.3.3` trở lên.
 
 ## Cài bằng HACS
 
@@ -73,6 +73,10 @@ Khi thêm camera vào Docker, integration tự phát hiện ở lần poll kế 
 
 ## Phát TTS
 
+### Cách 1 - gửi text trực tiếp cho Docker
+
+Docker dùng Edge TTS theo `TTS_VOICE` của backend:
+
 ```yaml
 action: media_player.play_media
 target:
@@ -81,6 +85,22 @@ data:
   media_content_type: tts
   media_content_id: "Có người đang đứng trước cổng"
 ```
+
+### Cách 2 - dùng `tts.speak` của Home Assistant
+
+Ví dụ với Wyoming Vietnamese:
+
+```yaml
+action: tts.speak
+target:
+  entity_id: tts.wyoming_vietnamese
+data:
+  cache: true
+  media_player_entity_id: media_player.camera_tts_gate
+  message: "Xin chào"
+```
+
+Ở cách này Home Assistant tạo audio bằng TTS provider đã chọn, integration resolve Media Source thành URL HTTP/HTTPS, sau đó Docker convert audio sang AAC phù hợp VoiceTalk của camera.
 
 ## Phát nhạc/audio URL
 
@@ -156,3 +176,8 @@ camera_tts_ezviz_hacs/
 ├── LICENSE
 └── README.md
 ```
+
+
+## Chẩn đoán lỗi v2.3.3
+
+Khi action lỗi, Home Assistant sẽ ghi rõ camera, loại action và endpoint backend, ví dụ `POST /say/kitchen` hoặc `POST /media/kitchen`, kèm HTTP status/timeout. Docker ghi lỗi job theo từng stage (`prepare` hoặc `hcnetsdk_playback`) để phân biệt lỗi tạo/convert audio với lỗi SDK/camera.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
@@ -26,6 +27,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .api import CameraTTSAPIError, CameraTTSAuthError
 from .coordinator import CameraTTSCoordinator
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 # Entities do no per-entity polling; all state is shared by one coordinator.
 PARALLEL_UPDATES = 0
@@ -156,11 +159,20 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
             content_filter=audio_filter,
         )
 
-    def _raise_api_error(self, exc: CameraTTSAPIError) -> None:
-        """Convert backend failures to HA-friendly action errors."""
+    def _raise_api_error(self, exc: CameraTTSAPIError, *, action: str) -> None:
+        """Convert backend failures to one clear HA action error."""
         if isinstance(exc, CameraTTSAuthError):
             self._entry.async_start_reauth(self.hass)
-        raise HomeAssistantError(f"Camera TTS backend error: {exc}") from exc
+        _LOGGER.error(
+            "Camera TTS action failed: camera=%s action=%s backend=%s error=%s",
+            self._camera_id,
+            action,
+            self.coordinator.api.base_url,
+            exc,
+        )
+        raise HomeAssistantError(
+            f"Camera TTS failed: camera={self._camera_id}, action={action}: {exc}"
+        ) from exc
 
     async def async_play_media(
         self,
@@ -178,7 +190,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
             try:
                 await self.coordinator.api.async_say(self._camera_id, text)
             except CameraTTSAPIError as exc:
-                self._raise_api_error(exc)
+                self._raise_api_error(exc, action="tts_text")
             self.coordinator.async_mark_started(
                 self._camera_id,
                 kind="tts",
@@ -224,7 +236,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
                 replace=replace,
             )
         except CameraTTSAPIError as exc:
-            self._raise_api_error(exc)
+            self._raise_api_error(exc, action="play_media_url")
 
         self.coordinator.async_mark_started(
             self._camera_id,
@@ -237,5 +249,5 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         try:
             await self.coordinator.api.async_stop(self._camera_id)
         except CameraTTSAPIError as exc:
-            self._raise_api_error(exc)
+            self._raise_api_error(exc, action="stop")
         self.coordinator.async_mark_stopped(self._camera_id)
