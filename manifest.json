@@ -1,0 +1,13 @@
+{
+  "domain": "camera_tts_ezviz",
+  "name": "Camera TTS EZVIZ",
+  "version": "2.3.0",
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "codeowners": [
+    "@khaisilk1910"
+  ],
+  "documentation": "https://github.com/khaisilk1910/camera-tts-ezviz",
+  "issue_tracker": "https://github.com/khaisilk1910/camera-tts-ezviz/issues"
+}
