@@ -13,19 +13,6 @@ Custom integration cho Home Assistant, kết nối tới Docker backend **Camera
 - Camera bị xóa khỏi Docker chuyển `Unavailable`; device cũ có thể xóa trong Home Assistant.
 - Có Diagnostics và tự che API key.
 
-## Tối ưu cho Home Assistant
-
-Bản `v2.3.2` được rà soát để hạn chế tải và tránh làm chậm Home Assistant:
-
-- Chỉ dùng async `aiohttp` session dùng chung của Home Assistant; không dùng `requests`, `time.sleep`, subprocess hoặc file/network I/O đồng bộ trong event loop.
-- `/cameras` có timeout tổng 4 giây và connect timeout tối đa 2 giây. Docker không hoạt động sẽ không giữ một request quá lâu.
-- Dùng `async_config_entry_first_refresh()` theo cơ chế chuẩn của Home Assistant. Nếu Docker chưa sẵn sàng, config entry chuyển sang retry; event loop không bị block.
-- Polling thích nghi: khoảng **3 giây khi playing/buffering**, **15 giây khi idle**, **30 giây khi backend offline**.
-- `always_update=False`: dữ liệu không đổi thì không đánh thức/cập nhật lại tất cả entity.
-- Sau TTS, `play_media` hoặc `stop`, trạng thái entity được cập nhật trong RAM ngay, không phát sinh thêm một request `/cameras` chỉ để refresh giao diện.
-- API key sai dùng `ConfigEntryAuthFailed` + Re-authentication chuẩn, không retry vô hạn bằng key sai.
-- Coordinator truyền `config_entry` rõ ràng, tương thích thay đổi DataUpdateCoordinator của Home Assistant 2026.8+.
-- `runtime_data`, config entry unload, dynamic entities và local brand được dùng theo API Home Assistant hiện tại.
 
 ## Yêu cầu
 
