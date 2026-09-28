@@ -29,6 +29,24 @@ POST /stop/<camera>
 
 Khuyến nghị Docker `v2.3.1` trở lên.
 
+
+
+
+## Cài đặt qua HACS
+
+Nhấn nút dưới đây để mở trực tiếp repository này trong HACS:
+
+[![Mở repository trong HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=khaisilk1910&repository=camera_tts_ezviz_hacs&category=integration)
+
+Sau đó:
+
+1. Chọn **Download** trong HACS để cài đặt tích hợp.
+2. Khởi động lại Home Assistant.
+3. Vào **Settings → Devices & services → Add integration**.
+4. Tìm **Camera TTS EZVIZ** và hoàn tất cấu hình theo giao diện.
+
+
+
 ## Cài bằng HACS
 
 Trong HACS:
