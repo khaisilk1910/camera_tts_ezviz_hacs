@@ -30,6 +30,7 @@ OFFLINE_UPDATE_INTERVAL = timedelta(seconds=60)
 # unavailable backend from delaying config-entry setup or service actions.
 CAMERAS_REQUEST_TIMEOUT = 4.0
 ACTION_REQUEST_TIMEOUT = 6.0
+PTZ_REQUEST_TIMEOUT = 8.0
 MEDIA_REQUEST_TIMEOUT = 10.0
 AUDIO_UPLOAD_TIMEOUT = 15.0
 JOB_REQUEST_TIMEOUT = 4.0

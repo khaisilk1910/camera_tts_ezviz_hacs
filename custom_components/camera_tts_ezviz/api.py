@@ -14,6 +14,7 @@ from .const import (
     CAMERAS_REQUEST_TIMEOUT,
     JOB_REQUEST_TIMEOUT,
     MEDIA_REQUEST_TIMEOUT,
+    PTZ_REQUEST_TIMEOUT,
 )
 
 
@@ -210,7 +211,9 @@ class CameraTTSAPI:
             "POST",
             f"/ptz/{camera_id}",
             json=body,
-            timeout_seconds=ACTION_REQUEST_TIMEOUT,
+            # First HCNetSDK PTZ use may lazily create a local worker. Keep this
+            # bounded but allow the requested move duration plus startup margin.
+            timeout_seconds=max(PTZ_REQUEST_TIMEOUT, min(20.0, duration + 5.0)),
         )
 
     async def async_upload_audio(
