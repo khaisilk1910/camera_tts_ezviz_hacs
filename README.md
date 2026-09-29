@@ -23,6 +23,18 @@ Tích hợp Home Assistant dành cho Docker backend `camera-tts-ezviz`, hỗ tr�
 
 ## Cài đặt qua HACS
 
+### Cài nhanh
+
+1. Nhấn nút bên dưới để thêm vào HACS trên Home Assistant.
+
+   [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=khaisilk1910&repository=camera_tts_ezviz_hacs&category=integration)
+
+   - Sau khi thêm trong HACS và khởi động lại Home Assistant
+     
+   - Vào Settings -> Integrations -> Add integration nhập `Camera TTS Multi-Vendor` để thêm
+
+
+### Cài thủ công
 1. Mở **HACS** → **Integrations**.
 2. Chọn **Custom repositories**.
 3. Thêm repository:
