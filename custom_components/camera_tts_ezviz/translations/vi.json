@@ -20,6 +20,17 @@
         "data": {
           "api_key": "API key"
         }
+      },
+      "reconfigure": {
+        "title": "Cấu hình lại Camera TTS EZVIZ",
+        "description": "Đổi URL Docker/API key mà không xóa thiết bị hoặc entity. Để trống API key để giữ khóa hiện tại.",
+        "data": {
+          "base_url": "URL API Docker",
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Để trống để giữ API key hiện tại"
+        }
       }
     },
     "error": {
@@ -29,7 +40,15 @@
     },
     "abort": {
       "already_configured": "Camera TTS API này đã được cấu hình",
-      "reauth_successful": "Đã cập nhật xác thực thành công"
+      "reauth_successful": "Đã cập nhật xác thực thành công",
+      "reconfigure_successful": "Đã cập nhật cấu hình thành công"
+    }
+  },
+  "entity": {
+    "number": {
+      "speaker_gain": {
+        "name": "Khuếch đại loa"
+      }
     }
   }
 }

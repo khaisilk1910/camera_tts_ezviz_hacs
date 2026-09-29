@@ -109,3 +109,45 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({vol.Required(CONF_API_KEY): str}),
             errors=errors,
         )
+
+    async def async_step_reconfigure(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ):
+        """Change Docker URL/API key without deleting entities or the config entry."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            try:
+                base_url = _normalize_url(user_input[CONF_BASE_URL])
+                api_key = str(user_input.get(CONF_API_KEY) or entry.data[CONF_API_KEY]).strip()
+                await _async_validate_connection(self.hass, base_url, api_key)
+            except ValueError:
+                errors[CONF_BASE_URL] = "invalid_url"
+            except CameraTTSAuthError:
+                errors[CONF_API_KEY] = "invalid_auth"
+            except CameraTTSAPIError:
+                errors["base"] = "cannot_connect"
+            else:
+                unique_id = base_url.lower()
+                if unique_id != entry.unique_id:
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_configured()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=unique_id,
+                    data_updates={CONF_BASE_URL: base_url, CONF_API_KEY: api_key},
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_BASE_URL, default=entry.data[CONF_BASE_URL]): str,
+                    vol.Optional(CONF_API_KEY, default=""): str,
+                }
+            ),
+            errors=errors,
+        )
+

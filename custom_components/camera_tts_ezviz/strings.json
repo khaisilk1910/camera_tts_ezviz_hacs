@@ -20,6 +20,17 @@
         "data": {
           "api_key": "API key"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Camera TTS EZVIZ",
+        "description": "Change the Docker URL/API key without removing devices or entities. Leave API key blank to keep the current key.",
+        "data": {
+          "base_url": "Docker API URL",
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Leave blank to keep the current API key"
+        }
       }
     },
     "error": {
@@ -29,7 +40,15 @@
     },
     "abort": {
       "already_configured": "This Camera TTS API is already configured",
-      "reauth_successful": "Authentication updated successfully"
+      "reauth_successful": "Authentication updated successfully",
+      "reconfigure_successful": "Configuration updated successfully"
+    }
+  },
+  "entity": {
+    "number": {
+      "speaker_gain": {
+        "name": "Speaker gain"
+      }
     }
   }
 }

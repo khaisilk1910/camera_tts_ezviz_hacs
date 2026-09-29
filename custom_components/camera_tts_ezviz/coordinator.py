@@ -93,6 +93,17 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
         self.async_set_updated_data(data)
 
     @callback
+    def async_mark_gain(self, camera_id: str, gain_db: float) -> None:
+        """Update cached gain after Docker persists a runtime setting."""
+        if camera_id not in (self.data or {}):
+            return
+        data: CameraData = dict(self.data or {})
+        camera = dict(data[camera_id])
+        camera["gain_db"] = float(gain_db)
+        data[camera_id] = camera
+        self.async_set_updated_data(data)
+
+    @callback
     def async_mark_stopped(self, camera_id: str) -> None:
         """Optimistically show a stopped camera without another API round trip."""
         if camera_id not in (self.data or {}):

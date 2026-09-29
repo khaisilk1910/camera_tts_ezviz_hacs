@@ -9,5 +9,5 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/khaisilk1910/camera_tts_ezviz_hacs/issues",
-  "version": "2.3.3"
+  "version": "2.4.0"
 }

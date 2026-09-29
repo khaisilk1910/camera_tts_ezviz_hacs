@@ -23,6 +23,8 @@ async def async_get_config_entry_diagnostics(
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "last_update_success": coordinator.last_update_success,
+        "backend_version": coordinator.api.backend_version,
+        "backend_features": sorted(coordinator.api.features),
         "update_interval_seconds": (
             coordinator.update_interval.total_seconds()
             if coordinator.update_interval is not None

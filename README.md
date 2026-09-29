@@ -1,4 +1,4 @@
-# Camera TTS EZVIZ HACS v2.3.3
+# Camera TTS EZVIZ HACS v2.4.0 (reviewed)
 
 Custom integration cho Home Assistant, kết nối tới Docker backend **Camera TTS EZVIZ** và tự tạo một `media_player` cho mỗi camera.
 
@@ -9,6 +9,9 @@ Custom integration cho Home Assistant, kết nối tới Docker backend **Camera
 - Phát TTS bằng `media_player.play_media` với `media_content_type: tts`.
 - Phát nhạc/audio từ HTTP/HTTPS và Home Assistant Media Sources.
 - `media_player.media_stop` dừng phát và xóa queue của camera.
+- Hỗ trợ `enqueue` đúng semantics `ADD/NEXT/PLAY/REPLACE` khi Docker v2.4.0+ báo capability.
+- Có `number.<camera>_speaker_gain` để chỉnh gain đầu ra -20…+12 dB; Docker lưu qua restart.
+- Có Reconfigure để đổi URL/API key mà giữ nguyên device/entity.
 - Trạng thái `idle`, `buffering`, `playing`.
 - Camera bị xóa khỏi Docker chuyển `Unavailable`; device cũ có thể xóa trong Home Assistant.
 - Có Diagnostics và tự che API key.
@@ -25,7 +28,7 @@ POST /media/<camera>
 POST /stop/<camera>
 ```
 
-Khuyến nghị Docker `v2.3.3` trở lên.
+Khuyến nghị **Docker v2.4.0 trở lên** để có queue modes và speaker gain. Docker cũ vẫn kết nối được nhưng các capability mới không được quảng bá; entity gain chỉ được tạo khi backend báo hỗ trợ.
 
 ## Cài bằng HACS
 
@@ -70,6 +73,12 @@ media_player.camera_tts_yard
 Entity ID có thể được Home Assistant điều chỉnh nếu trùng tên; unique ID vẫn cố định theo config entry + camera ID.
 
 Khi thêm camera vào Docker, integration tự phát hiện ở lần poll kế tiếp; không cần xóa và thêm lại integration.
+
+## Local 100% với Piper
+
+Nếu mục tiêu là không phụ thuộc Internet, dùng `tts.speak` với entity **Piper** của Home Assistant (Piper chạy local). Đây là đường khuyến nghị: Piper local → Home Assistant Media Source → Docker LAN → HCNetSDK → camera.
+
+Cách `media_content_type: tts` gửi text trực tiếp xuống Docker vẫn dùng Edge TTS để tương thích cũ, nên không phải local 100%.
 
 ## Phát TTS
 
@@ -123,6 +132,26 @@ Trong Automation/Script:
 
 Integration resolve Media Source thành URL đầy đủ và gửi URL cho Docker backend.
 
+## Queue và announce fallback
+
+```yaml
+action: media_player.play_media
+target:
+  entity_id: media_player.camera_tts_gate
+data:
+  media_content_type: music
+  media_content_id: "http://192.168.31.100/local/audio.mp3"
+  enqueue: next
+```
+
+`ADD` nối cuối; `NEXT` chèn kế tiếp; `PLAY` ngắt item hiện tại nhưng giữ các item đang chờ; `REPLACE` ngắt và xóa queue.
+
+`announce: true` vẫn được chấp nhận như fallback ưu tiên tương đương `PLAY`, nhưng integration **không quảng bá `MEDIA_ANNOUNCE`** vì HCNetSDK hiện chưa thể resume chính xác nội dung bị ngắt tại vị trí cũ. Điều này tránh báo capability sai cho Home Assistant.
+
+## Chỉnh gain loa
+
+Mỗi camera có entity Number **Khuếch đại loa / Speaker gain** từ -20 dB đến +12 dB. Việc đổi gain chỉ gọi một HTTP PATCH local khi người dùng chỉnh; entity không tạo polling riêng.
+
 ## Dừng phát
 
 ```yaml
@@ -133,7 +162,7 @@ target:
 
 ## Khi Docker tạm thời offline
 
-Không cần restart Home Assistant. Entity sẽ chuyển `Unavailable`; coordinator giảm polling xuống khoảng 30 giây. Khi Docker hoạt động lại, integration tự phục hồi ở lần update tiếp theo.
+Không cần restart Home Assistant. Entity sẽ chuyển `Unavailable`; coordinator giảm polling xuống khoảng 60 giây. Khi Docker hoạt động lại, integration tự phục hồi ở lần update tiếp theo.
 
 Nếu API key bị thay đổi, Home Assistant sẽ yêu cầu **Re-authenticate** thay vì phải xóa integration.
 
@@ -178,6 +207,6 @@ camera_tts_ezviz_hacs/
 ```
 
 
-## Chẩn đoán lỗi v2.3.3
+## Thay đổi v2.4.0
 
-Khi action lỗi, Home Assistant sẽ ghi rõ camera, loại action và endpoint backend, ví dụ `POST /say/kitchen` hoặc `POST /media/kitchen`, kèm HTTP status/timeout. Docker ghi lỗi job theo từng stage (`prepare` hoặc `hcnetsdk_playback`) để phân biệt lỗi tạo/convert audio với lỗi SDK/camera.
+Xem `CHANGES_2.4.0.md`. Diagnostics hiện có thêm backend version/features; polling idle/offline được giảm tần suất để nhẹ Home Assistant hơn.

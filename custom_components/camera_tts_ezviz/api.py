@@ -30,6 +30,8 @@ class CameraTTSAPI:
         self._session = session
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.backend_version: str | None = None
+        self.features: frozenset[str] = frozenset()
 
     @staticmethod
     def _timeout(total: float) -> aiohttp.ClientTimeout:
@@ -122,17 +124,27 @@ class CameraTTSAPI:
             "/cameras",
             timeout_seconds=CAMERAS_REQUEST_TIMEOUT,
         )
+        version = data.get("version")
+        self.backend_version = str(version) if version not in (None, "") else None
+        features = data.get("features", [])
+        self.features = frozenset(str(item) for item in features) if isinstance(features, list) else frozenset()
         cameras = data.get("cameras", [])
         if not isinstance(cameras, list):
             raise CameraTTSAPIError("Invalid cameras response")
         return [item for item in cameras if isinstance(item, dict) and item.get("id")]
 
-    async def async_say(self, camera_id: str, text: str) -> dict[str, Any]:
+    async def async_say(
+        self,
+        camera_id: str,
+        text: str,
+        *,
+        queue_mode: str = "add",
+    ) -> dict[str, Any]:
         """Queue a TTS message."""
         return await self._request(
             "POST",
             f"/say/{camera_id}",
-            json={"text": text},
+            json={"text": text, "queue_mode": queue_mode},
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
 
@@ -144,10 +156,10 @@ class CameraTTSAPI:
         title: str | None = None,
         content_type: str | None = None,
         cache_key: str | None = None,
-        replace: bool = True,
+        queue_mode: str = "replace",
     ) -> dict[str, Any]:
         """Queue a media URL for playback."""
-        body: dict[str, Any] = {"url": url, "replace": replace}
+        body: dict[str, Any] = {"url": url, "queue_mode": queue_mode}
         if title:
             body["title"] = title
         if content_type:
@@ -160,6 +172,15 @@ class CameraTTSAPI:
             f"/media/{camera_id}",
             json=body,
             timeout_seconds=MEDIA_REQUEST_TIMEOUT,
+        )
+
+    async def async_set_gain(self, camera_id: str, gain_db: float) -> dict[str, Any]:
+        """Set and persist the runtime speaker gain for one camera."""
+        return await self._request(
+            "PATCH",
+            f"/cameras/{camera_id}/settings",
+            json={"gain_db": gain_db},
+            timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
 
     async def async_stop(self, camera_id: str) -> dict[str, Any]:

@@ -20,13 +20,12 @@ from homeassistant.components.media_player.browse_media import async_process_pla
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import CameraTTSAPIError, CameraTTSAuthError
 from .coordinator import CameraTTSCoordinator
 from .const import DOMAIN
+from .entity import CameraTTSEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,16 +58,24 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(add_new_entities))
 
 
-class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerEntity):
+class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
     """Expose one camera speaker as a Home Assistant media_player."""
 
     _attr_device_class = MediaPlayerDeviceClass.SPEAKER
     _attr_has_entity_name = True
-    _attr_supported_features = (
+    _base_supported_features = (
         MediaPlayerEntityFeature.PLAY_MEDIA
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.BROWSE_MEDIA
     )
+
+    @property
+    def supported_features(self) -> MediaPlayerEntityFeature:
+        """Advertise only queue semantics the backend implements completely."""
+        features = self._base_supported_features
+        if "queue_modes" in self.coordinator.api.features:
+            features |= MediaPlayerEntityFeature.MEDIA_ENQUEUE
+        return features
 
     def __init__(
         self,
@@ -76,29 +83,11 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         entry: ConfigEntry,
         camera_id: str,
     ) -> None:
-        super().__init__(coordinator)
-        self._entry = entry
-        self._camera_id = camera_id
+        super().__init__(coordinator, entry, camera_id)
         # One media_player per device, so the entity itself does not need a
         # duplicated name. Existing entity IDs stay tied to the unique ID.
         self._attr_name = None
         self._attr_unique_id = f"{entry.entry_id}_{camera_id}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry.entry_id}:{camera_id}")},
-            name=f"Camera TTS {camera_id}",
-            manufacturer="EZVIZ / Hikvision",
-            model="HCNetSDK speaker",
-        )
-
-    @property
-    def camera_data(self) -> dict[str, Any] | None:
-        """Return cached camera data; never perform I/O from an entity property."""
-        return (self.coordinator.data or {}).get(self._camera_id)
-
-    @property
-    def available(self) -> bool:
-        """Return whether Docker and this camera are available."""
-        return self.coordinator.last_update_success and self.camera_data is not None
 
     @property
     def state(self) -> MediaPlayerState:
@@ -135,6 +124,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
             "queued": data.get("queued", 0),
             "gain_db": data.get("gain_db"),
             "sdk_worker_alive": sender.get("alive"),
+            "sdk_connected": sender.get("connected"),
             "sdk_last_error": sender.get("last_error"),
         }
 
@@ -174,6 +164,23 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
             f"Camera TTS failed: camera={self._camera_id}, action={action}: {exc}"
         ) from exc
 
+    @staticmethod
+    def _queue_mode(enqueue: MediaPlayerEnqueue | None, announce: bool | None, *, default: str) -> str:
+        """Translate Home Assistant queue semantics to the Docker API."""
+        # Accept announce as a best-effort immediate interrupt for compatibility,
+        # but do not advertise MEDIA_ANNOUNCE: HCNetSDK cannot resume the
+        # interrupted item at its exact playback position afterward.
+        if announce:
+            return "play"
+        if enqueue is None:
+            return default
+        return {
+            MediaPlayerEnqueue.ADD: "add",
+            MediaPlayerEnqueue.NEXT: "next",
+            MediaPlayerEnqueue.PLAY: "play",
+            MediaPlayerEnqueue.REPLACE: "replace",
+        }.get(enqueue, default)
+
     async def async_play_media(
         self,
         media_type: str,
@@ -188,7 +195,11 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         if media_type_text in {"tts", "text", DOMAIN}:
             text = str(media_id)
             try:
-                await self.coordinator.api.async_say(self._camera_id, text)
+                await self.coordinator.api.async_say(
+                    self._camera_id,
+                    text,
+                    queue_mode=self._queue_mode(enqueue, announce, default="add"),
+                )
             except CameraTTSAPIError as exc:
                 self._raise_api_error(exc, action="tts_text")
             self.coordinator.async_mark_started(
@@ -224,8 +235,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
         if not title:
             title = PurePosixPath(parsed.path).name or "Media"
 
-        # ADD/NEXT append. PLAY/REPLACE starts now and clears the old queue.
-        replace = enqueue not in {MediaPlayerEnqueue.ADD, MediaPlayerEnqueue.NEXT}
+        queue_mode = self._queue_mode(enqueue, announce, default="replace")
         try:
             await self.coordinator.api.async_play_media(
                 self._camera_id,
@@ -233,7 +243,7 @@ class CameraTTSMediaPlayer(CoordinatorEntity[CameraTTSCoordinator], MediaPlayerE
                 title=str(title),
                 content_type=str(resolved_type),
                 cache_key=original_id,
-                replace=replace,
+                queue_mode=queue_mode,
             )
         except CameraTTSAPIError as exc:
             self._raise_api_error(exc, action="play_media_url")
