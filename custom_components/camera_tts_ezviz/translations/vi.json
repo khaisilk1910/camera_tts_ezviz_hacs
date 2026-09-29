@@ -1,53 +1,64 @@
 {
-  "title": "Camera TTS EZVIZ",
+  "title": "Camera TTS đa hãng",
   "config": {
     "step": {
       "user": {
-        "title": "Kết nối Camera TTS EZVIZ",
-        "description": "Kết nối Home Assistant với API Docker Camera TTS.",
+        "title": "Kết nối Camera TTS Docker",
+        "description": "Kết nối Home Assistant với Camera TTS Docker API trong mạng nội bộ. Camera EZVIZ/Hikvision, Imou và Dahua được lấy tự động từ Docker.",
         "data": {
-          "base_url": "URL API Docker",
-          "api_key": "API key"
+          "base_url": "Địa chỉ Docker API",
+          "api_key": "Khóa API"
         },
         "data_description": {
           "base_url": "Ví dụ: http://192.168.31.100:8124",
-          "api_key": "Phải giống API_KEY trong Stack Docker"
+          "api_key": "Phải giống API_KEY trong Docker stack"
         }
       },
       "reauth_confirm": {
-        "title": "Kết nối lại Camera TTS EZVIZ",
-        "description": "Docker API đã từ chối API key đang lưu. Hãy nhập API key hiện tại.",
+        "title": "Kết nối lại Camera TTS",
+        "description": "Docker API từ chối khóa API đã lưu. Hãy nhập khóa API hiện tại.",
         "data": {
-          "api_key": "API key"
+          "api_key": "Khóa API"
         }
       },
       "reconfigure": {
-        "title": "Cấu hình lại Camera TTS EZVIZ",
-        "description": "Đổi URL Docker/API key mà không xóa thiết bị hoặc entity. Để trống API key để giữ khóa hiện tại.",
+        "title": "Cấu hình lại Camera TTS",
+        "description": "Đổi URL/khóa API Docker mà không xóa thiết bị hoặc entity. Để trống khóa API để giữ khóa hiện tại.",
         "data": {
-          "base_url": "URL API Docker",
-          "api_key": "API key"
+          "base_url": "Địa chỉ Docker API",
+          "api_key": "Khóa API"
         },
         "data_description": {
-          "api_key": "Để trống để giữ API key hiện tại"
+          "api_key": "Để trống để giữ khóa API hiện tại"
         }
       }
     },
     "error": {
-      "cannot_connect": "Không thể kết nối tới Camera TTS API",
-      "invalid_auth": "API key không đúng",
+      "cannot_connect": "Không thể kết nối Camera TTS API",
+      "invalid_auth": "Khóa API không hợp lệ",
       "invalid_url": "Hãy nhập URL http:// hoặc https:// hợp lệ"
     },
     "abort": {
       "already_configured": "Camera TTS API này đã được cấu hình",
-      "reauth_successful": "Đã cập nhật xác thực thành công",
-      "reconfigure_successful": "Đã cập nhật cấu hình thành công"
+      "reauth_successful": "Đã cập nhật xác thực",
+      "reconfigure_successful": "Đã cập nhật cấu hình"
     }
   },
   "entity": {
     "number": {
       "speaker_gain": {
-        "name": "Khuếch đại loa"
+        "name": "Âm lượng loa"
+      },
+      "mic_gain": {
+        "name": "Khuếch đại micro"
+      }
+    },
+    "switch": {
+      "mute_mic": {
+        "name": "Tắt micro"
+      },
+      "wake_sound": {
+        "name": "Âm báo khi gọi trợ lý"
       }
     }
   }

@@ -1,6 +1,6 @@
 {
-  "name": "Camera TTS EZVIZ",
-  "homeassistant": "2025.10.0",
+  "name": "Camera TTS Multi-Vendor",
+  "homeassistant": "2026.9.0",
   "render_readme": true,
   "zip_release": false
 }

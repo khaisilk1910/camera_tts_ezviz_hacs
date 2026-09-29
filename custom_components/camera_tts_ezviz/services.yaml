@@ -1,0 +1,58 @@
+ptz:
+  name: Move camera PTZ
+  description: Move or zoom a PTZ-capable EZVIZ/Hikvision, Imou, or Dahua camera through the local Docker backend.
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          integration: camera_tts_ezviz
+          domain: media_player
+    direction:
+      required: true
+      selector:
+        select:
+          options:
+            - left
+            - right
+            - up
+            - down
+            - up_left
+            - up_right
+            - down_left
+            - down_right
+            - zoom_in
+            - zoom_out
+    speed:
+      required: false
+      example: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+    duration:
+      required: false
+      default: 0.35
+      selector:
+        number:
+          min: 0.05
+          max: 10
+          step: 0.05
+          unit_of_measurement: s
+
+get_intercom_source:
+  name: Get two-way talk source
+  description: Return the go2rtc exec source for microphone backchannel audio to the selected camera.
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          integration: camera_tts_ezviz
+          domain: media_player
+    docker_host:
+      required: false
+      example: "192.168.31.100"
+      selector:
+        text:

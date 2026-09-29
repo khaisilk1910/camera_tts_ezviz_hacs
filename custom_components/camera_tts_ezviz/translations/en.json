@@ -1,10 +1,10 @@
 {
-  "title": "Camera TTS EZVIZ",
+  "title": "Camera TTS Multi-Vendor",
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Camera TTS EZVIZ",
-        "description": "Connect Home Assistant to the Camera TTS Docker API.",
+        "title": "Connect to Camera TTS Docker",
+        "description": "Connect Home Assistant to the local Camera TTS Docker API. EZVIZ/Hikvision, Imou and Dahua cameras are discovered from Docker.",
         "data": {
           "base_url": "Docker API URL",
           "api_key": "API key"
@@ -15,14 +15,14 @@
         }
       },
       "reauth_confirm": {
-        "title": "Reconnect Camera TTS EZVIZ",
+        "title": "Reconnect Camera TTS",
         "description": "The Docker API rejected the saved API key. Enter the current API key.",
         "data": {
           "api_key": "API key"
         }
       },
       "reconfigure": {
-        "title": "Reconfigure Camera TTS EZVIZ",
+        "title": "Reconfigure Camera TTS",
         "description": "Change the Docker URL/API key without removing devices or entities. Leave API key blank to keep the current key.",
         "data": {
           "base_url": "Docker API URL",
@@ -46,9 +46,12 @@
   },
   "entity": {
     "number": {
-      "speaker_gain": {
-        "name": "Speaker gain"
-      }
+      "speaker_gain": {"name": "Speaker gain"},
+      "mic_gain": {"name": "Microphone gain"}
+    },
+    "switch": {
+      "mute_mic": {"name": "Mute microphone"},
+      "wake_sound": {"name": "Wake acknowledgement sound"}
     }
   }
 }

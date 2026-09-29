@@ -1,4 +1,4 @@
-"""Media player entities for Camera TTS EZVIZ."""
+"""Media player entities for Camera TTS multi-vendor cameras."""
 
 from __future__ import annotations
 
@@ -121,11 +121,13 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         sender = data.get("sender") or {}
         return {
             "camera_id": self._camera_id,
+            "vendor": data.get("vendor"),
             "queued": data.get("queued", 0),
             "gain_db": data.get("gain_db"),
-            "sdk_worker_alive": sender.get("alive"),
-            "sdk_connected": sender.get("connected"),
-            "sdk_last_error": sender.get("last_error"),
+            "transport_alive": sender.get("alive"),
+            "transport_connected": sender.get("connected"),
+            "transport_last_error": sender.get("last_error"),
+            "ptz_protocol": data.get("ptz_protocol"),
         }
 
     async def async_browse_media(
@@ -225,7 +227,7 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         parsed = urlparse(media_url)
         if parsed.scheme not in {"http", "https"}:
             raise HomeAssistantError(
-                "Camera TTS EZVIZ requires an HTTP/HTTPS media URL or Home Assistant Media Source"
+                "Camera TTS requires an HTTP/HTTPS media URL or Home Assistant Media Source"
             )
 
         title = None

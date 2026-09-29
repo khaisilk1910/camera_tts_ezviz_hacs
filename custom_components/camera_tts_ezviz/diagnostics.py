@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_API_KEY
 from .coordinator import CameraTTSCoordinator
 
-TO_REDACT = {CONF_API_KEY}
+TO_REDACT = {CONF_API_KEY, "mic_url"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -30,5 +30,5 @@ async def async_get_config_entry_diagnostics(
             if coordinator.update_interval is not None
             else None
         ),
-        "cameras": coordinator.data or {},
+        "cameras": async_redact_data(coordinator.data or {}, TO_REDACT),
     }

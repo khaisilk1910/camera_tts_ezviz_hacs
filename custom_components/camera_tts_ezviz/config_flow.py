@@ -1,4 +1,4 @@
-"""Config flow for Camera TTS EZVIZ."""
+"""Config flow for Camera TTS Multi-Vendor."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ async def _async_validate_connection(
 
 
 class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle Camera TTS EZVIZ config and reauthentication flows."""
+    """Handle Camera TTS Multi-Vendor config and reauthentication flows."""
 
     VERSION = 1
 
@@ -60,7 +60,7 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(base_url.lower())
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title="Camera TTS EZVIZ",
+                    title="Camera TTS Multi-Vendor",
                     data={CONF_BASE_URL: base_url, CONF_API_KEY: api_key},
                 )
 

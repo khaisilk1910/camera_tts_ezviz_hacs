@@ -11,6 +11,8 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import CameraTTSAPI, CameraTTSAPIError, CameraTTSAuthError
+from .voice_state import CameraVoiceState
+
 from .const import (
     ACTIVE_UPDATE_INTERVAL,
     DOMAIN,
@@ -43,6 +45,7 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
             always_update=False,
         )
         self.api = api
+        self.voice_states: dict[str, CameraVoiceState] = {}
 
     @staticmethod
     def _has_active_playback(data: CameraData) -> bool:
@@ -64,6 +67,10 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
             raise UpdateFailed(f"Camera TTS API unavailable: {exc}") from exc
 
         data: CameraData = {str(item["id"]): item for item in cameras}
+        for camera_id, camera in data.items():
+            capabilities = camera.get("capabilities") or {}
+            if capabilities.get("assist_mic") or camera.get("mic_url"):
+                self.voice_states.setdefault(camera_id, CameraVoiceState())
         self.update_interval = (
             ACTIVE_UPDATE_INTERVAL if self._has_active_playback(data) else IDLE_UPDATE_INTERVAL
         )
