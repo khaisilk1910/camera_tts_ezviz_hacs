@@ -47,7 +47,7 @@
   "entity": {
     "number": {
       "speaker_gain": {
-        "name": "Âm lượng loa"
+        "name": "Khuếch đại phát (DSP)"
       },
       "mic_gain": {
         "name": "Khuếch đại micro"
@@ -59,6 +59,11 @@
       },
       "wake_sound": {
         "name": "Âm báo khi gọi trợ lý"
+      }
+    },
+    "button": {
+      "stop_playback": {
+        "name": "Dừng phát ngay"
       }
     }
   }

@@ -68,6 +68,7 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.STOP
         | MediaPlayerEntityFeature.BROWSE_MEDIA
     )
+    _attr_volume_step = 0.05
 
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
@@ -75,6 +76,12 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         features = self._base_supported_features
         if "queue_modes" in self.coordinator.api.features:
             features |= MediaPlayerEntityFeature.MEDIA_ENQUEUE
+        if "media_volume" in self.coordinator.api.features:
+            features |= (
+                MediaPlayerEntityFeature.VOLUME_SET
+                | MediaPlayerEntityFeature.VOLUME_STEP
+                | MediaPlayerEntityFeature.VOLUME_MUTE
+            )
         return features
 
     def __init__(
@@ -88,6 +95,7 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         # duplicated name. Existing entity IDs stay tied to the unique ID.
         self._attr_name = None
         self._attr_unique_id = f"{entry.entry_id}_{camera_id}"
+        self._last_nonzero_volume = 1.0
 
     @property
     def state(self) -> MediaPlayerState:
@@ -98,6 +106,23 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         if raw == "buffering":
             return MediaPlayerState.BUFFERING
         return MediaPlayerState.IDLE
+
+    @property
+    def volume_level(self) -> float | None:
+        """Return normalized per-camera speaker volume."""
+        value = (self.camera_data or {}).get("volume_level")
+        if value is None:
+            return None
+        level = max(0.0, min(float(value), 1.0))
+        if level > 0:
+            self._last_nonzero_volume = level
+        return level
+
+    @property
+    def is_volume_muted(self) -> bool | None:
+        """Treat zero speaker volume as muted."""
+        level = self.volume_level
+        return None if level is None else level <= 0.0001
 
     @property
     def media_title(self) -> str | None:
@@ -124,6 +149,7 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
             "vendor": data.get("vendor"),
             "queued": data.get("queued", 0),
             "gain_db": data.get("gain_db"),
+            "volume_backend": data.get("volume_backend"),
             "transport_alive": sender.get("alive"),
             "transport_connected": sender.get("connected"),
             "transport_last_error": sender.get("last_error"),
@@ -255,6 +281,39 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
             kind="media",
             title=str(title),
         )
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        """Set speaker volume using the backend's local hardware/software adapter."""
+        level = max(0.0, min(float(volume), 1.0))
+        try:
+            payload = await self.coordinator.api.async_set_volume(self._camera_id, level)
+        except CameraTTSAPIError as exc:
+            self._raise_api_error(exc, action="set_volume")
+        actual = float(payload.get("volume_level", level))
+        if actual > 0:
+            self._last_nonzero_volume = actual
+        self.coordinator.async_mark_volume(
+            self._camera_id,
+            actual,
+            str(payload.get("volume_backend")) if payload.get("volume_backend") else None,
+        )
+
+    async def async_volume_up(self) -> None:
+        current = self.volume_level if self.volume_level is not None else 1.0
+        await self.async_set_volume_level(min(1.0, current + self.volume_step))
+
+    async def async_volume_down(self) -> None:
+        current = self.volume_level if self.volume_level is not None else 1.0
+        await self.async_set_volume_level(max(0.0, current - self.volume_step))
+
+    async def async_mute_volume(self, mute: bool) -> None:
+        if mute:
+            current = self.volume_level
+            if current is not None and current > 0:
+                self._last_nonzero_volume = current
+            await self.async_set_volume_level(0.0)
+            return
+        await self.async_set_volume_level(max(0.05, self._last_nonzero_volume))
 
     async def async_media_stop(self) -> None:
         """Stop current playback and clear this camera's queued jobs."""

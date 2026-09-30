@@ -46,12 +46,25 @@
   },
   "entity": {
     "number": {
-      "speaker_gain": {"name": "Speaker gain"},
-      "mic_gain": {"name": "Microphone gain"}
+      "speaker_gain": {
+        "name": "Playback gain (DSP)"
+      },
+      "mic_gain": {
+        "name": "Microphone gain"
+      }
     },
     "switch": {
-      "mute_mic": {"name": "Mute microphone"},
-      "wake_sound": {"name": "Wake acknowledgement sound"}
+      "mute_mic": {
+        "name": "Mute microphone"
+      },
+      "wake_sound": {
+        "name": "Wake acknowledgement sound"
+      }
+    },
+    "button": {
+      "stop_playback": {
+        "name": "Stop playback"
+      }
     }
   }
 }

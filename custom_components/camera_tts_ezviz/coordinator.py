@@ -100,6 +100,19 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
         self.async_set_updated_data(data)
 
     @callback
+    def async_mark_volume(self, camera_id: str, volume_level: float, volume_backend: str | None = None) -> None:
+        """Update cached media-player volume after a successful backend action."""
+        if camera_id not in (self.data or {}):
+            return
+        data: CameraData = dict(self.data or {})
+        camera = dict(data[camera_id])
+        camera["volume_level"] = max(0.0, min(float(volume_level), 1.0))
+        if volume_backend:
+            camera["volume_backend"] = volume_backend
+        data[camera_id] = camera
+        self.async_set_updated_data(data)
+
+    @callback
     def async_mark_gain(self, camera_id: str, gain_db: float) -> None:
         """Update cached gain after Docker persists a runtime setting."""
         if camera_id not in (self.data or {}):

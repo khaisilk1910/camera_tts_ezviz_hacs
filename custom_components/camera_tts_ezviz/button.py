@@ -28,27 +28,55 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator: CameraTTSCoordinator = entry.runtime_data
-    known: set[str] = set()
+    ptz_known: set[str] = set()
+    stop_known: set[str] = set()
 
     @callback
     def add_new_entities() -> None:
-        ids = {
+        current = set(coordinator.data or {})
+        entities: list[ButtonEntity] = []
+
+        new_stop = sorted(current - stop_known)
+        stop_known.update(new_stop)
+        entities.extend(CameraTTSStopButton(coordinator, entry, camera_id) for camera_id in new_stop)
+
+        ptz_ids = {
             camera_id
             for camera_id, data in (coordinator.data or {}).items()
             if (data.get("capabilities") or {}).get("ptz")
         }
-        new_ids = sorted(ids - known)
-        if not new_ids:
-            return
-        known.update(new_ids)
-        async_add_entities(
+        new_ptz = sorted(ptz_ids - ptz_known)
+        ptz_known.update(new_ptz)
+        entities.extend(
             CameraTTSPTZButton(coordinator, entry, camera_id, direction, name)
-            for camera_id in new_ids
+            for camera_id in new_ptz
             for direction, name in _BUTTONS.items()
         )
+        if entities:
+            async_add_entities(entities)
 
     add_new_entities()
     entry.async_on_unload(coordinator.async_add_listener(add_new_entities))
+
+
+class CameraTTSStopButton(CameraTTSEntity, ButtonEntity):
+    """Dedicated emergency stop button for one camera speaker."""
+
+    _attr_translation_key = "stop_playback"
+    _attr_icon = "mdi:stop-circle-outline"
+
+    def __init__(self, coordinator: CameraTTSCoordinator, entry: ConfigEntry, camera_id: str) -> None:
+        super().__init__(coordinator, entry, camera_id)
+        self._attr_unique_id = f"{entry.entry_id}_{camera_id}_stop"
+
+    async def async_press(self) -> None:
+        try:
+            await self.coordinator.api.async_stop(self._camera_id)
+        except CameraTTSAPIError as exc:
+            raise HomeAssistantError(
+                f"Stop playback failed for {self._camera_id}: {exc}"
+            ) from exc
+        self.coordinator.async_mark_stopped(self._camera_id)
 
 
 class CameraTTSPTZButton(CameraTTSEntity, ButtonEntity):

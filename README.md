@@ -1,12 +1,15 @@
-# Camera TTS Multi-Vendor HACS v2.5.1
+# Camera TTS Multi-Vendor HACS v2.6.0
 
-Custom integration Home Assistant cho Docker backend `camera-tts-ezviz` nhưng giữ nguyên domain `camera_tts_ezviz` để **không phá config entry/entity cũ**. Bản 2.5.1 hỗ trợ EZVIZ/Hikvision, Imou và Dahua.
+Custom integration Home Assistant cho Docker backend `camera-tts-ezviz` nhưng giữ nguyên domain `camera_tts_ezviz` để **không phá config entry/entity cũ**. Bản 2.6.0 hỗ trợ EZVIZ/Hikvision, Imou và Dahua.
 
 ## Tính năng
 
 - Một `media_player` cho mỗi camera Docker, tự thêm camera mới ở lần coordinator refresh kế tiếp.
-- TTS/media/queue và speaker gain như v2.4.0.
-- Hiển thị `vendor`, transport status và PTZ protocol trong entity attributes.
+- TTS/media/queue; media URL dài dùng streaming khi backend v2.6.0+.
+- `media_player` chuẩn Home Assistant có volume 0–100%, volume up/down, mute, Stop, Browse Media, Play Media và enqueue theo capability backend.
+- Có button `Dừng phát ngay` riêng cho từng camera; đồng thời media player vẫn quảng cáo `STOP` để card chuẩn của Home Assistant hiển thị control Stop.
+- `speaker_gain` cũ vẫn giữ làm **Playback gain (DSP)** nâng cao; không còn dùng nó thay cho volume chuẩn của media player.
+- Hiển thị `vendor`, transport status, `volume_backend` và PTZ protocol trong entity attributes.
 - Camera có PTZ sinh 6 button: trái/phải/lên/xuống/zoom in/zoom out.
 - Service `camera_tts_ezviz.ptz` hỗ trợ thêm 4 hướng chéo, speed và duration.
 - Service `camera_tts_ezviz.get_intercom_source` trả go2rtc backchannel source cho đàm thoại hai chiều.
@@ -25,12 +28,12 @@ Custom integration Home Assistant cho Docker backend `camera-tts-ezviz` nhưng g
 
 ## Yêu cầu
 
-Khuyến nghị Docker **v2.5.1+**. Backend cũ vẫn dùng media player/gain theo capability negotiation nhưng sẽ không có PTZ, Assist hoặc intercom.
+Khuyến nghị Docker **v2.6.0+** để có media streaming, instant Stop và volume chuẩn. Backend v2.5.x vẫn dùng được PTZ/Assist/intercom theo capability negotiation nhưng chưa có các tính năng media-volume/streaming mới.
 
 Docker cần trả các capability mới qua `GET /cameras`:
 
 ```text
-multi_vendor, ptz, audio_upload, assist_mic, intercom_exec
+queue_modes, runtime_gain, media_volume, streaming_media, instant_stop, multi_vendor, ptz, audio_upload, assist_mic, intercom_exec
 ```
 
 ## Cài đặt
@@ -51,6 +54,15 @@ CAMERAS_JSON={"gate":{"vendors":"ezviz","ip":"192.168.31.59","user":"admin","pas
 ```
 
 Khi sửa/thêm camera trong Docker và restart/update container, HA sẽ nhận camera ở lần poll kế tiếp; không cần xóa rồi thêm integration.
+
+## Media player / volume / Stop
+
+`media_player` dùng đúng API hiện tại của Home Assistant: `volume_level` là `0.0..1.0` và chỉ quảng cáo các feature backend làm được. Không quảng cáo Pause/Seek/Resume vì camera VoiceTalk không có vị trí phát có thể resume chính xác.
+
+- EZVIZ/Hikvision: slider ưu tiên volume phần cứng HCNetSDK; nếu camera từ chối lệnh volume, Docker fallback DSP software.
+- Imou/Dahua: software-volume; với media streaming v2.6.0 thay đổi có hiệu lực trong khi bài đang phát.
+- Stop gọi `/stop/<camera>` và Docker có thể hủy cả trạng thái Buffering.
+- Home Assistant quyết định bố cục card, nên integration không thể ép một button entity nằm đúng pixel bên cạnh slider. Trên card media-player chuẩn, Stop/volume cùng thuộc một entity; button `Dừng phát ngay` riêng được cung cấp để bạn đặt cạnh slider trên dashboard nếu muốn.
 
 ## PTZ
 
@@ -133,6 +145,6 @@ Entry không chặn event loop. Nếu backend không phản hồi, request setup
 
 - Tất cả file Python custom component đã qua `py_compile`.
 - API/platform structure được đối chiếu với dự án `imou-homeassistant` cung cấp và Home Assistant Assist patterns hiện tại.
-- Backend v2.5.1 dùng PTZ HCNetSDK local cho EZVIZ/Hikvision và tiếp tục dùng shared aiohttp bất đồng bộ ở Home Assistant.
+- Backend v2.6.0 dùng media streaming/instant stop, HCNetSDK hardware volume khi có và PTZ HCNetSDK local cho EZVIZ/Hikvision; Home Assistant vẫn dùng shared aiohttp bất đồng bộ.
 
-Xem `CHANGES_2.5.1.md`.
+Xem `CHANGES_2.6.0.md`.

@@ -186,6 +186,15 @@ class CameraTTSAPI:
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
 
+    async def async_set_volume(self, camera_id: str, volume_level: float) -> dict[str, Any]:
+        """Set normalized speaker volume (0..1) for one camera."""
+        return await self._request(
+            "PATCH",
+            f"/cameras/{camera_id}/settings",
+            json={"volume_level": max(0.0, min(float(volume_level), 1.0))},
+            timeout_seconds=ACTION_REQUEST_TIMEOUT,
+        )
+
     async def async_stop(self, camera_id: str) -> dict[str, Any]:
         """Stop playback and clear the camera queue."""
         return await self._request(
