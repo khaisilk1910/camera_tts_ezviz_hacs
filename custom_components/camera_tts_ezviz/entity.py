@@ -43,6 +43,19 @@ class CameraTTSEntity(CoordinatorEntity[CameraTTSCoordinator]):
         return (self.coordinator.data or {}).get(self._camera_id)
 
     @property
+    def has_microphone(self) -> bool:
+        """Return current microphone capability, not a stale discovery flag."""
+        camera = self.camera_data or {}
+        capabilities = camera.get("capabilities") or {}
+        return bool(capabilities.get("assist_mic") or camera.get("mic_url"))
+
+    @property
+    def has_ptz(self) -> bool:
+        """Return current PTZ availability after Docker changes capability."""
+        camera = self.camera_data or {}
+        return bool((camera.get("capabilities") or {}).get("ptz"))
+
+    @property
     def available(self) -> bool:
         """Return backend/camera availability."""
         return self.coordinator.last_update_success and self.camera_data is not None

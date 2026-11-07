@@ -35,7 +35,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import CameraTTSAPIError
-from .const import DOMAIN, MIC_CHUNK, MIC_RATE
+from .const import (
+    CONF_ASSIST_AUTO_LISTEN,
+    DEFAULT_ASSIST_AUTO_LISTEN,
+    DOMAIN,
+    MIC_CHUNK,
+    MIC_RATE,
+)
 from .coordinator import CameraTTSCoordinator
 from .entity import CameraTTSEntity
 from .select import selector_scope
@@ -122,11 +128,19 @@ async def async_setup_entry(
 class CameraTTSAssistSatellite(CameraTTSEntity, AssistSatelliteEntity):
     """Native Assist satellite backed by a camera microphone and Docker speaker."""
 
-    _attr_name = "Assist satellite"
-    _attr_supported_features = (
-        AssistSatelliteEntityFeature.ANNOUNCE
-        | AssistSatelliteEntityFeature.START_CONVERSATION
-    )
+    _attr_translation_key = "assist_satellite"
+    _attr_icon = "mdi:microphone-message"
+    @property
+    def available(self) -> bool:
+        return super().available and self.has_microphone
+
+    @property
+    def supported_features(self) -> AssistSatelliteEntityFeature:
+        """Do not expose start-conversation when continuous listening is off."""
+        features = AssistSatelliteEntityFeature.ANNOUNCE
+        if self._entry.options.get(CONF_ASSIST_AUTO_LISTEN, DEFAULT_ASSIST_AUTO_LISTEN):
+            features |= AssistSatelliteEntityFeature.START_CONVERSATION
+        return features
 
     def __init__(self, coordinator: CameraTTSCoordinator, entry: ConfigEntry, camera_id: str) -> None:
         super().__init__(coordinator, entry, camera_id)
@@ -179,14 +193,23 @@ class CameraTTSAssistSatellite(CameraTTSEntity, AssistSatelliteEntity):
 
     @callback
     def async_get_configuration(self) -> AssistSatelliteConfiguration:
-        raise NotImplementedError
+        """Use the pipeline's wake-word engine, not on-device models."""
+        return AssistSatelliteConfiguration(
+            available_wake_words=[],
+            active_wake_words=[],
+            max_active_wake_words=0,
+        )
 
     async def async_set_configuration(self, config: AssistSatelliteConfiguration) -> None:
-        raise NotImplementedError
+        """Reject unsupported on-device wake-word changes gracefully."""
+        if config.active_wake_words:
+            raise HomeAssistantError("Wake words are configured in the Assist pipeline")
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        if self._mic_url:
+        if self._voice_state.mic_muted:
+            self._may_listen.clear()
+        if self._entry.options.get(CONF_ASSIST_AUTO_LISTEN, DEFAULT_ASSIST_AUTO_LISTEN):
             self._runner = self._entry.async_create_background_task(
                 self.hass,
                 self._run(),
@@ -206,7 +229,10 @@ class CameraTTSAssistSatellite(CameraTTSEntity, AssistSatelliteEntity):
     @callback
     def _on_mute(self, muted: bool) -> None:
         if muted:
+            self._pause_mic()
             self._end_current_audio_turn()
+        else:
+            self._may_listen.set()
 
     @callback
     def _on_gain(self, _gain: float) -> None:
@@ -514,6 +540,10 @@ class CameraTTSAssistSatellite(CameraTTSEntity, AssistSatelliteEntity):
         self,
         start_announcement: AssistSatelliteAnnouncement,
     ) -> None:
+        if not self._entry.options.get(CONF_ASSIST_AUTO_LISTEN, DEFAULT_ASSIST_AUTO_LISTEN):
+            raise HomeAssistantError(
+                "Assist auto listening is disabled; enable it in the integration options"
+            )
         await self.async_announce(start_announcement)
         self._continue_conversation = True
         self._end_current_audio_turn()

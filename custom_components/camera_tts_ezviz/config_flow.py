@@ -4,24 +4,49 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.core import callback
 
 from .api import CameraTTSAPI, CameraTTSAPIError, CameraTTSAuthError
-from .const import CONF_API_KEY, CONF_BASE_URL, DEFAULT_BASE_URL, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_ASSIST_AUTO_LISTEN,
+    CONF_BASE_URL,
+    CONF_POLL_INTERVAL,
+    DEFAULT_ASSIST_AUTO_LISTEN,
+    DEFAULT_BASE_URL,
+    DEFAULT_POLL_INTERVAL,
+    DOMAIN,
+)
 
 
 def _normalize_url(value: str) -> str:
-    """Validate and normalize a Docker API URL."""
+    """Reject credentials, query strings, fragments, and invalid API URLs."""
     value = value.strip().rstrip("/")
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if any(ch in value for ch in ("\n", "\r", "\t", "\\")):
         raise ValueError("invalid_url")
-    return value
+    try:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or any(char.isspace() for char in parsed.hostname)
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or parsed.port == 0
+            or ".." in parsed.path.split("/")
+        ):
+            raise ValueError("invalid_url")
+    except ValueError as exc:
+        raise ValueError("invalid_url") from exc
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, "", ""))
 
 
 async def _async_validate_connection(
@@ -41,6 +66,14 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> CameraTTSOptionsFlow:
+        """Return the standard options dialog from the integration card."""
+        return CameraTTSOptionsFlow()
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Configure a new Docker API connection."""
         errors: dict[str, str] = {}
@@ -48,7 +81,7 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 base_url = _normalize_url(user_input[CONF_BASE_URL])
-                api_key = str(user_input[CONF_API_KEY]).strip()
+                api_key = str(user_input.get(CONF_API_KEY, "")).strip()
                 await _async_validate_connection(self.hass, base_url, api_key)
             except ValueError:
                 errors[CONF_BASE_URL] = "invalid_url"
@@ -69,7 +102,7 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_BASE_URL, default=DEFAULT_BASE_URL): str,
-                    vol.Required(CONF_API_KEY): str,
+                    vol.Optional(CONF_API_KEY, default=""): str,
                 }
             ),
             errors=errors,
@@ -151,3 +184,29 @@ class CameraTTSEzvizConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+
+
+class CameraTTSOptionsFlow(config_entries.OptionsFlowWithReload):
+    """User-configurable polling and Assist startup behavior."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        """Show safe, bounded options in the native Home Assistant UI."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        options = self.config_entry.options
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_POLL_INTERVAL,
+                        default=options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=10, max=120)),
+                    vol.Required(
+                        CONF_ASSIST_AUTO_LISTEN,
+                        default=options.get(CONF_ASSIST_AUTO_LISTEN, DEFAULT_ASSIST_AUTO_LISTEN),
+                    ): bool,
+                }
+            ),
+        )

@@ -50,6 +50,10 @@ async def async_setup_entry(
 
 class _VoiceSwitch(CameraTTSEntity, SwitchEntity, RestoreEntity):
     @property
+    def available(self) -> bool:
+        return super().available and self.has_microphone
+
+    @property
     def _voice_state(self):
         return self.coordinator.voice_states[self._camera_id]
 

@@ -1,6 +1,4 @@
 {
   "name": "Camera TTS Multi-Vendor",
-  "homeassistant": "2026.9.0",
-  "render_readme": true,
-  "zip_release": false
+  "homeassistant": "2026.11.0"
 }

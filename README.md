@@ -1,6 +1,8 @@
-# Camera TTS Multi-Vendor HACS v2.6.0
+# Camera TTS Multi-Vendor — Home Assistant Marketplace v2.7.0
 
-Custom integration Home Assistant cho Docker backend `camera-tts-ezviz` nhưng giữ nguyên domain `camera_tts_ezviz` để **không phá config entry/entity cũ**. Bản 2.6.0 hỗ trợ EZVIZ/Hikvision, Imou và Dahua.
+Custom integration cho **Home Assistant 2026.11+** và **Marketplace** (thay cho HACS độc lập ở Home Assistant 2026.11), kết nối với Docker backend `camera-tts-ezviz` để điều khiển loa/mic của EZVIZ/Hikvision, Imou và Dahua.
+
+**Giữ nguyên domain `camera_tts_ezviz`, config entry và unique ID cũ**, không cần xóa cấu hình hoặc tạo lại automation khi cập nhật. Đây là bản mã nguồn integration; không chứa Docker backend.
 
 ## Tính năng
 
@@ -19,11 +21,12 @@ Custom integration Home Assistant cho Docker backend `camera-tts-ezviz` nhưng g
 
 ## Không làm chậm khởi động Home Assistant
 
-- Setup chỉ có **một GET `/cameras` bất đồng bộ** bằng shared aiohttp session; timeout LAN ngắn 4 giây.
+- `async_setup_entry` chỉ đăng ký platform và coordinator, **không thực hiện request mạng**. Poll `/cameras` đầu tiên được lên lịch **sau sự kiện Home Assistant STARTED**; nếu thêm integration trong khi HA đã chạy, poll thực hiện ngay trong background task.
+- Nếu Docker chưa bật, HA vẫn tiếp tục khởi động. Các camera/entity xuất hiện sau lần poll đầu thành công, thay vì phải đợi backend online trong giai đoạn khởi động.
 - Không gọi HCNetSDK, không probe PTZ và không mở RTSP trong config-entry setup.
-- ffmpeg mic chỉ khởi chạy sau khi Assist entity đã được thêm vào HA và camera thật sự có `mic_url`.
+- ffmpeg mic chỉ khởi chạy sau khi Assist entity đã được thêm vào HA. Có thể tắt tự khởi động listener qua nút **Configure** trong integration.
 - Mic stream bị đứng/đứt sẽ reopen có delay; pipeline lỗi ngay khi khởi chạy có exponential backoff tới 60 giây để tránh vòng lặp CPU.
-- Coordinator dùng `always_update=False`; poll 20 giây khi idle, 3 giây khi đang phát và 60 giây khi Docker offline.
+- Coordinator dùng `always_update=False`; poll idle **mặc định 20 giây** (có thể chỉnh **10–120 giây**), 3 giây khi đang phát và 60 giây khi Docker offline. Thay đổi capability backend cũng được nhận diện.
 - PTZ/intercom chỉ tạo network traffic khi người dùng gọi action/service.
 
 ## Yêu cầu
@@ -36,16 +39,21 @@ Docker cần trả các capability mới qua `GET /cameras`:
 queue_modes, runtime_gain, media_volume, streaming_media, instant_stop, multi_vendor, ptz, audio_upload, assist_mic, intercom_exec
 ```
 
-## Cài đặt
+## Cài đặt qua Home Assistant Marketplace (2026.11+)
 
-1. HACS → Integrations → Custom repositories.
-2. Repository: `https://github.com/khaisilk1910/camera_tts_ezviz_hacs`
-3. Category: Integration.
-4. Cài **Camera TTS Multi-Vendor** và restart HA.
-5. Settings → Devices & services → Add integration → Camera TTS Multi-Vendor.
-6. Nhập Docker API URL và cùng `API_KEY` với stack.
+1. Trong Home Assistant mở **Settings → Marketplace**.
+2. Tìm **Camera TTS Multi-Vendor**. Nếu repository chưa được liệt kê, thêm repository tùy chỉnh `https://github.com/khaisilk1910/camera_tts_ezviz_hacs` với loại **Integration** (vị trí nút thêm repository tùy chỉnh tùy phiên bản giao diện Marketplace).
+3. Cài integration. Với bản cài mới, Marketplace có thể nạp integration không cần restart; **sau khi cập nhật mã nguồn của integration đã cài, nên khởi động lại Home Assistant** để Python module mới có hiệu lực.
+4. **Settings → Devices & services → Add integration → Camera TTS Multi-Vendor**.
+5. Nhập URL Docker API (ví dụ `http://192.168.31.100:8124`) và `API_KEY` tương ứng. Kiểm tra kết nối được chạy lúc thêm/sửa cấu hình, không chạy khi HA khởi động lại.
 
-Domain cũ vẫn là `camera_tts_ezviz`; nâng cấp từ v2.4.0 không cần xóa integration.
+**Nâng cấp từ HACS cũ:** Home Assistant 2026.11 **tự động chuyển HACS và các custom repositories đã cài sang Marketplace**. Không cần gỡ HACS hoặc xóa config entry thủ công; hãy cập nhật **cùng repository** để giữ entity/automation hiện có. Xem tài liệu Marketplace chính thức.
+
+**Để phát hành trên Marketplace:** upload nội dung mã nguồn trong file ZIP này lên **repository GitHub public**, với `hacs.json` và `custom_components/camera_tts_ezviz/` ở thư mục gốc, sau đó tạo GitHub release/tag `2.7.0` đúng với `manifest.json`. ZIP tải trực tiếp này **không phải** file mà Marketplace tự cài từ máy tính người dùng.
+
+**Cấu hình giao diện:** Settings → Devices & services → Camera TTS Multi-Vendor → **Configure** để chỉnh chu kỳ lấy dữ liệu và tự nghe Assist. Dùng menu **Reconfigure** để thay URL/API key và flow **Reauthenticate** khi key thay đổi. Cả ba dùng UI chuẩn, có bản dịch Việt/Anh.
+
+**Giới hạn:** Tắt tự nghe Assist sẽ không mở ffmpeg/RTSP. Khi đó action Announce vẫn hoạt động nhưng action Start conversation sẽ không khả dụng cho đến khi bật lại tuỳ chọn.
 
 ## Camera Docker ví dụ
 
@@ -139,12 +147,28 @@ Nếu dùng `media_content_type: tts` gửi text trực tiếp xuống Docker th
 
 ## Khi Docker offline
 
-Entry không chặn event loop. Nếu backend không phản hồi, request setup/update có timeout; entity chuyển unavailable và coordinator backoff polling. Khi Docker trở lại integration tự phục hồi. API key sai sẽ kích hoạt re-authentication.
+Entry không chặn khởi động. Nếu backend không phản hồi, poll bất đồng bộ có timeout 4 giây; entity chuyển unavailable và coordinator backoff polling 60 giây. Khi Docker trở lại integration tự phục hồi. API key sai sẽ kích hoạt re-authentication.
 
-## Kiểm tra trước khi đóng gói
+## Logs và kiểm tra lỗi
 
-- Tất cả file Python custom component đã qua `py_compile`.
-- API/platform structure được đối chiếu với dự án `imou-homeassistant` cung cấp và Home Assistant Assist patterns hiện tại.
-- Backend v2.6.0 dùng media streaming/instant stop, HCNetSDK hardware volume khi có và PTZ HCNetSDK local cho EZVIZ/Hikvision; Home Assistant vẫn dùng shared aiohttp bất đồng bộ.
+1. **Settings → System → Logs** để xem lỗi Camera TTS, Docker offline, xác thực, hoặc Assist/ffmpeg bị gián đoạn.
+2. Khi cần thông tin chi tiết, thêm vào `configuration.yaml`:
 
-Xem `CHANGES_2.6.0.md`.
+   ```yaml
+   logger:
+     default: warning
+     logs:
+       custom_components.camera_tts_ezviz: debug
+   ```
+
+   Restart HA sau khi lưu. Chỉ để DEBUG khi điều tra lỗi vì log nhiều hơn.
+3. Vào integration → menu ba chấm → **Download diagnostics** để xuất trạng thái, version và feature backend, chu kỳ cập nhật và trạng thái transport. Chức năng này **không gọi HTTP**; các URL mic/RTSP, key và thông tin nhạy cảm không được xuất raw.
+4. Đối chiếu Docker HTTP `/cameras`: phải trả JSON object chứa `cameras` là list, mỗi camera có `id` duy nhất; `features` nếu có phải là list string. JSON sai sẽ bị báo lỗi thay vì bị hiểu nhầm là camera đã bị xóa.
+
+## Kiểm thử và giới hạn xác nhận
+
+Bản 2.7.0 đã được biên dịch với Python 3.13, vượt qua **36 pytest** cho HTTP API, auth, response lỗi, timeout, che thông tin nhạy cảm, validation URL và các hợp đồng code cần để không chặn HA startup. Workflow GitHub Actions chạy **pytest + hassfest + HACS validator** để bắt lỗi khi commit. API đặc biệt của VAD selector đã được cập nhật theo chữ ký Home Assistant 2026.11.
+
+**Lưu ý:** Không có hệ thống Home Assistant 2026.11 đang chạy, Docker backend hoặc thiết bị camera thực trong môi trường kiểm thử này; do đó **chưa thể xác nhận end-to-end Assist / PTZ / phát TTS / HACS Marketplace thực tế**. Cần chạy Actions và kiểm thử bằng camera thật sau khi triển khai.
+
+Xem `CHANGES_2.7.0.md` để biết chi tiết.

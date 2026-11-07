@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import TimestampDataUpdateCoordinator, UpdateFailed
 
 from .api import CameraTTSAPI, CameraTTSAPIError, CameraTTSAuthError
 from .voice_state import CameraVoiceState
 
 from .const import (
     ACTIVE_UPDATE_INTERVAL,
+    CONF_POLL_INTERVAL,
+    DEFAULT_POLL_INTERVAL,
     DOMAIN,
-    IDLE_UPDATE_INTERVAL,
     OFFLINE_UPDATE_INTERVAL,
 )
 
@@ -25,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 CameraData = dict[str, dict[str, Any]]
 
 
-class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
+class CameraTTSCoordinator(TimestampDataUpdateCoordinator[CameraData]):
     """Poll lightweight camera state from the local Docker service."""
 
     def __init__(
@@ -34,12 +36,13 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
         entry: ConfigEntry,
         api: CameraTTSAPI,
     ) -> None:
+        self._idle_interval = timedelta(seconds=int(entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)))
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
             config_entry=entry,
-            update_interval=IDLE_UPDATE_INTERVAL,
+            update_interval=self._idle_interval,
             # Camera data is a normal dict and supports equality. Do not wake
             # every entity when the Docker response has not changed.
             always_update=False,
@@ -66,14 +69,26 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
             self.update_interval = OFFLINE_UPDATE_INTERVAL
             raise UpdateFailed(f"Camera TTS API unavailable: {exc}") from exc
 
-        data: CameraData = {str(item["id"]): item for item in cameras}
+        # Carry feature changes into the snapshot equality check. Otherwise
+        # always_update=False would silently miss newly enabled controls.
+        signature = tuple(sorted(self.api.features))
+        data: CameraData = {
+            str(item["id"]): {**item, "_backend_features": signature}
+            for item in cameras
+        }
         for camera_id, camera in data.items():
             capabilities = camera.get("capabilities") or {}
             if capabilities.get("assist_mic") or camera.get("mic_url"):
                 self.voice_states.setdefault(camera_id, CameraVoiceState())
         self.update_interval = (
-            ACTIVE_UPDATE_INTERVAL if self._has_active_playback(data) else IDLE_UPDATE_INTERVAL
+            ACTIVE_UPDATE_INTERVAL if self._has_active_playback(data) else self._idle_interval
         )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "Camera TTS poll succeeded: entry=%s cameras=%d features=%s interval=%ss",
+                self.config_entry.entry_id, len(data), ",".join(signature),
+                self.update_interval.total_seconds(),
+            )
         return data
 
     @callback
@@ -93,7 +108,11 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
         camera["state"] = "buffering"
         camera["current_kind"] = kind
         camera["media_title"] = title
-        camera["queued"] = max(1, int(camera.get("queued") or 0))
+        try:
+            queued = int(camera.get("queued") or 0)
+        except (ValueError, TypeError, OverflowError):
+            queued = 0
+        camera["queued"] = max(1, queued)
         data[camera_id] = camera
 
         self.update_interval = ACTIVE_UPDATE_INTERVAL
@@ -137,5 +156,5 @@ class CameraTTSCoordinator(DataUpdateCoordinator[CameraData]):
         camera["queued"] = 0
         data[camera_id] = camera
 
-        self.update_interval = IDLE_UPDATE_INTERVAL
+        self.update_interval = self._idle_interval
         self.async_set_updated_data(data)

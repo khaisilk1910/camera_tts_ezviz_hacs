@@ -50,12 +50,20 @@ def selector_scope(entry: ConfigEntry, camera_id: str) -> str:
 
 
 class CameraTTSPipelineSelect(CameraTTSEntity, AssistPipelineSelect):
+    @property
+    def available(self) -> bool:
+        return super().available and self.has_microphone
+
     def __init__(self, hass: HomeAssistant, coordinator: CameraTTSCoordinator, entry: ConfigEntry, camera_id: str) -> None:
         CameraTTSEntity.__init__(self, coordinator, entry, camera_id)
         AssistPipelineSelect.__init__(self, hass, DOMAIN, selector_scope(entry, camera_id))
 
 
 class CameraTTSVadSelect(CameraTTSEntity, VadSensitivitySelect):
+    @property
+    def available(self) -> bool:
+        return super().available and self.has_microphone
+
     def __init__(self, hass: HomeAssistant, coordinator: CameraTTSCoordinator, entry: ConfigEntry, camera_id: str) -> None:
         CameraTTSEntity.__init__(self, coordinator, entry, camera_id)
         VadSensitivitySelect.__init__(self, hass, selector_scope(entry, camera_id))

@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.start import async_at_started
 
 from .api import CameraTTSAPI, CameraTTSAPIError
 from .const import CONF_API_KEY, CONF_BASE_URL, DOMAIN, PLATFORMS, PTZ_DIRECTIONS
 from .coordinator import CameraTTSCoordinator
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _resolve_camera(hass: HomeAssistant, entity_id: str) -> tuple[CameraTTSCoordinator, str]:
     record = er.async_get(hass).async_get(entity_id)
-    if record is None or not record.config_entry_id:
+    if record is None or record.domain != "media_player" or not record.config_entry_id:
         raise ServiceValidationError(f"Unknown entity: {entity_id}")
     entry = hass.config_entries.async_get_entry(record.config_entry_id)
     if entry is None or entry.domain != DOMAIN:
@@ -102,7 +107,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Set up Camera TTS from a config entry."""
     api = CameraTTSAPI(
         async_get_clientsession(hass),
@@ -111,18 +116,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator = CameraTTSCoordinator(hass, entry, api)
 
-    # One short asynchronous LAN request establishes the dynamic camera list.
-    # No camera SDK/RTSP/PTZ probe runs in Home Assistant during startup.
-    await coordinator.async_config_entry_first_refresh()
-
+    # Forward empty platforms first; each platform subscribes to the coordinator
+    # and creates camera entities on the first successful update. This avoids
+    # holding up Home Assistant startup when Docker is offline or slow.
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    return True
+
+    @callback
+    def _start_first_refresh(_hass: HomeAssistant) -> None:
+        entry.async_create_background_task(
+            hass,
+            coordinator.async_refresh(),
+            f"{DOMAIN} initial camera refresh",
+        )
+
+    # On restart defer all network traffic until HA has finished starting;
+    # when added through the UI while running, this runs immediately.
+    entry.async_on_unload(async_at_started(hass, _start_first_refresh))
+    _LOGGER.debug("Camera TTS configured; scheduled first API poll after startup")
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry cleanly."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Unload a config entry cleanly, surfacing platform failures."""
+    await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
 
 
 async def async_remove_config_entry_device(
@@ -132,6 +148,10 @@ async def async_remove_config_entry_device(
 ) -> bool:
     """Allow removal of a stale camera device no longer returned by Docker."""
     coordinator: CameraTTSCoordinator = entry.runtime_data
+    # Before the initial successful poll, the device list is unknown. Do not
+    # allow accidentally deleting an active device during startup/offline.
+    if coordinator.last_update_success_time is None or not coordinator.last_update_success:
+        return False
     active_identifiers = {
         (DOMAIN, f"{entry.entry_id}:{camera_id}")
         for camera_id in (coordinator.data or {})

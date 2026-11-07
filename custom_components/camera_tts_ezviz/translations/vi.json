@@ -64,7 +64,64 @@
     "button": {
       "stop_playback": {
         "name": "Dừng phát ngay"
+      },
+      "ptz_left": {
+        "name": "PTZ trái"
+      },
+      "ptz_right": {
+        "name": "PTZ phải"
+      },
+      "ptz_up": {
+        "name": "PTZ lên"
+      },
+      "ptz_down": {
+        "name": "PTZ xuống"
+      },
+      "ptz_zoom_in": {
+        "name": "PTZ phóng to"
+      },
+      "ptz_zoom_out": {
+        "name": "PTZ thu nhỏ"
       }
+    },
+    "select": {
+      "pipeline": {
+        "name": "Pipeline Assist"
+      },
+      "vad_sensitivity": {
+        "name": "Độ nhạy phát hiện giọng nói"
+      }
+    },
+    "assist_satellite": {
+      "assist_satellite": {
+        "name": "Trợ lý giọng nói"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tùy chọn Camera TTS",
+        "description": "Tùy chỉnh thời gian đồng bộ khi rảnh và việc tự kích hoạt Assist. Thay đổi sẽ tự tải lại tích hợp.",
+        "data": {
+          "poll_interval": "Chu kỳ đồng bộ khi rảnh (giây)",
+          "assist_auto_listen": "Tự lắng nghe micro cho Assist"
+        },
+        "data_description": {
+          "poll_interval": "10–120 giây; khi đang phát âm thanh vẫn cập nhật nhanh hơn.",
+          "assist_auto_listen": "Tắt để không tự mở luồng RTSP/ffmpeg. Vẫn có thể dùng loa và thông báo Assist."
+        }
+      }
+    }
+  },
+  "services": {
+    "ptz": {
+      "name": "Điều khiển quay/quét camera",
+      "description": "Điều khiển hướng, tốc độ và thời lượng qua Docker cục bộ."
+    },
+    "get_intercom_source": {
+      "name": "Lấy nguồn âm thanh hai chiều",
+      "description": "Trả về cấu hình nguồn go2rtc backchannel."
     }
   }
 }

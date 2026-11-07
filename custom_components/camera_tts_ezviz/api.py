@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+import re
+from urllib.parse import quote
 from typing import Any
 
 import aiohttp
@@ -24,6 +26,21 @@ class CameraTTSAPIError(Exception):
 
 class CameraTTSAuthError(CameraTTSAPIError):
     """Authentication error."""
+
+
+def _safe_error(value: Any) -> str:
+    """Keep backend error details useful without leaking common credentials."""
+    message = str(value or "request failed")[:300].replace("\n", " ").replace("\r", " ")
+    message = re.sub(
+        r"(?i)(?:rtsp|rtsps|https?)://[^/@\s]+@",
+        "[redacted-url]@",
+        message,
+    )
+    return re.sub(
+        r"(?i)\b(api[_-]?key|token|password|passwd|secret)\s*[:=]\s*[^,;\s]+",
+        r"\1=[redacted]",
+        message,
+    )
 
 
 class CameraTTSAPI:
@@ -88,7 +105,7 @@ class CameraTTSAPI:
                     message = payload.get("error") if isinstance(payload, dict) else None
                     raise CameraTTSAPIError(
                         f"{method} {path}: backend HTTP {response.status} after "
-                        f"{elapsed:.2f}s: {message or 'request failed'}"
+                        f"{elapsed:.2f}s: {_safe_error(message)}"
                     )
 
                 if not isinstance(payload, dict):
@@ -107,7 +124,7 @@ class CameraTTSAPI:
             ) from exc
         except aiohttp.ClientConnectorError as exc:
             raise CameraTTSAPIError(
-                f"{method} {path}: cannot connect to backend {self.base_url}: {exc.os_error or exc}"
+                f"{method} {path}: cannot connect to backend: {_safe_error(exc.os_error or type(exc).__name__)}"
             ) from exc
         except asyncio.TimeoutError as exc:
             elapsed = time.monotonic() - started
@@ -117,7 +134,7 @@ class CameraTTSAPI:
             ) from exc
         except aiohttp.ClientError as exc:
             raise CameraTTSAPIError(
-                f"{method} {path}: HTTP client error: {exc.__class__.__name__}: {exc}"
+                f"{method} {path}: HTTP client error: {exc.__class__.__name__}: {_safe_error(exc)}"
             ) from exc
 
     async def async_cameras(self) -> list[dict[str, Any]]:
@@ -127,14 +144,41 @@ class CameraTTSAPI:
             "/cameras",
             timeout_seconds=CAMERAS_REQUEST_TIMEOUT,
         )
+        # Never interpret malformed/missing camera data as an empty inventory:
+        # that could temporarily hide every existing device in Home Assistant.
+        if "cameras" not in data or not isinstance(data["cameras"], list):
+            raise CameraTTSAPIError("GET /cameras: missing or invalid 'cameras' list")
+
+        cameras: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for index, item in enumerate(data["cameras"]):
+            if not isinstance(item, dict):
+                raise CameraTTSAPIError(f"GET /cameras: item #{index} is not an object")
+            raw_id = item.get("id")
+            if not isinstance(raw_id, (str, int)) or isinstance(raw_id, bool) or not str(raw_id).strip():
+                raise CameraTTSAPIError(f"GET /cameras: item #{index} has no valid id")
+            camera_id = str(raw_id)
+            if camera_id in seen:
+                raise CameraTTSAPIError("GET /cameras: duplicate camera id")
+            seen.add(camera_id)
+            if not isinstance(item.get("capabilities") or {}, dict):
+                raise CameraTTSAPIError(f"GET /cameras: invalid capabilities for camera #{index}")
+            # Normalize IDs and optional capabilities, and reject malformed data
+            # without altering the cached feature/version snapshot.
+            cameras.append({**item, "id": camera_id, "capabilities": item.get("capabilities") or {}})
+
+        raw_features = data.get("features", [])
+        if not isinstance(raw_features, list) or not all(isinstance(f, str) for f in raw_features):
+            raise CameraTTSAPIError("GET /cameras: invalid feature list")
         version = data.get("version")
         self.backend_version = str(version) if version not in (None, "") else None
-        features = data.get("features", [])
-        self.features = frozenset(str(item) for item in features) if isinstance(features, list) else frozenset()
-        cameras = data.get("cameras", [])
-        if not isinstance(cameras, list):
-            raise CameraTTSAPIError("Invalid cameras response")
-        return [item for item in cameras if isinstance(item, dict) and item.get("id")]
+        self.features = frozenset(raw_features)
+        return cameras
+
+    @staticmethod
+    def _segment(value: str) -> str:
+        """Encode an ID as exactly one URL path segment."""
+        return quote(str(value), safe="")
 
     async def async_say(
         self,
@@ -146,7 +190,7 @@ class CameraTTSAPI:
         """Queue a TTS message."""
         return await self._request(
             "POST",
-            f"/say/{camera_id}",
+            f"/say/{self._segment(camera_id)}",
             json={"text": text, "queue_mode": queue_mode},
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
@@ -172,7 +216,7 @@ class CameraTTSAPI:
 
         return await self._request(
             "POST",
-            f"/media/{camera_id}",
+            f"/media/{self._segment(camera_id)}",
             json=body,
             timeout_seconds=MEDIA_REQUEST_TIMEOUT,
         )
@@ -181,7 +225,7 @@ class CameraTTSAPI:
         """Set and persist the runtime speaker gain for one camera."""
         return await self._request(
             "PATCH",
-            f"/cameras/{camera_id}/settings",
+            f"/cameras/{self._segment(camera_id)}/settings",
             json={"gain_db": gain_db},
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
@@ -190,7 +234,7 @@ class CameraTTSAPI:
         """Set normalized speaker volume (0..1) for one camera."""
         return await self._request(
             "PATCH",
-            f"/cameras/{camera_id}/settings",
+            f"/cameras/{self._segment(camera_id)}/settings",
             json={"volume_level": max(0.0, min(float(volume_level), 1.0))},
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
@@ -199,7 +243,7 @@ class CameraTTSAPI:
         """Stop playback and clear the camera queue."""
         return await self._request(
             "POST",
-            f"/stop/{camera_id}",
+            f"/stop/{self._segment(camera_id)}",
             json={},
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )
@@ -218,7 +262,7 @@ class CameraTTSAPI:
             body["speed"] = speed
         return await self._request(
             "POST",
-            f"/ptz/{camera_id}",
+            f"/ptz/{self._segment(camera_id)}",
             json=body,
             # First HCNetSDK PTZ use may lazily create a local worker. Keep this
             # bounded but allow the requested move duration plus startup margin.
@@ -236,7 +280,7 @@ class CameraTTSAPI:
         """Upload a bounded audio blob for local playback by Docker."""
         return await self._request(
             "POST",
-            f"/audio/{camera_id}",
+            f"/audio/{self._segment(camera_id)}",
             params={"title": title, "queue_mode": queue_mode},
             data=content,
             headers={"Content-Type": "audio/wav"},
@@ -247,7 +291,7 @@ class CameraTTSAPI:
         """Return one backend job snapshot."""
         return await self._request(
             "GET",
-            f"/jobs/{job_id}",
+            f"/jobs/{self._segment(job_id)}",
             timeout_seconds=JOB_REQUEST_TIMEOUT,
         )
 
@@ -259,7 +303,7 @@ class CameraTTSAPI:
             if job.get("status") in {"done", "error", "stopped"}:
                 if job.get("status") != "done":
                     raise CameraTTSAPIError(
-                        f"job {job_id} ended as {job.get('status')}: {job.get('error') or 'playback did not complete'}"
+                        f"job {_safe_error(job_id)} ended as {job.get('status')}: {_safe_error(job.get('error') or 'playback did not complete')}"
                     )
                 return job
             if time.monotonic() >= deadline:
@@ -276,7 +320,7 @@ class CameraTTSAPI:
         params = {"host": host} if host else None
         return await self._request(
             "GET",
-            f"/cameras/{camera_id}/intercom-source",
+            f"/cameras/{self._segment(camera_id)}/intercom-source",
             params=params,
             timeout_seconds=ACTION_REQUEST_TIMEOUT,
         )

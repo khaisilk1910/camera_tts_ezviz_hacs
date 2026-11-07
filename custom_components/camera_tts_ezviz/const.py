@@ -18,6 +18,10 @@ PLATFORMS = [
 
 CONF_BASE_URL = "base_url"
 CONF_API_KEY = "api_key"
+CONF_POLL_INTERVAL = "poll_interval"
+CONF_ASSIST_AUTO_LISTEN = "assist_auto_listen"
+DEFAULT_POLL_INTERVAL = 20
+DEFAULT_ASSIST_AUTO_LISTEN = True
 DEFAULT_BASE_URL = "http://127.0.0.1:8124"
 
 # Keep idle polling light. Playback actions update the entity optimistically and

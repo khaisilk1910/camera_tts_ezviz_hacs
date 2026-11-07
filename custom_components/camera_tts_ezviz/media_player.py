@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
@@ -22,7 +23,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import CameraTTSAPIError, CameraTTSAuthError
+from .api import CameraTTSAPIError, CameraTTSAuthError, _safe_error
 from .coordinator import CameraTTSCoordinator
 from .const import DOMAIN
 from .entity import CameraTTSEntity
@@ -113,7 +114,13 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         value = (self.camera_data or {}).get("volume_level")
         if value is None:
             return None
-        level = max(0.0, min(float(value), 1.0))
+        try:
+            level = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(level):
+            return None
+        level = max(0.0, min(level, 1.0))
         if level > 0:
             self._last_nonzero_volume = level
         return level
@@ -144,6 +151,8 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
         """Expose lightweight diagnostics already present in coordinator data."""
         data = self.camera_data or {}
         sender = data.get("sender") or {}
+        if not isinstance(sender, dict):
+            sender = {}
         return {
             "camera_id": self._camera_id,
             "vendor": data.get("vendor"),
@@ -152,7 +161,9 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
             "volume_backend": data.get("volume_backend"),
             "transport_alive": sender.get("alive"),
             "transport_connected": sender.get("connected"),
-            "transport_last_error": sender.get("last_error"),
+            "transport_last_error": (
+                _safe_error(sender["last_error"]) if sender.get("last_error") else None
+            ),
             "ptz_protocol": data.get("ptz_protocol"),
         }
 
@@ -185,11 +196,11 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
             "Camera TTS action failed: camera=%s action=%s backend=%s error=%s",
             self._camera_id,
             action,
-            self.coordinator.api.base_url,
-            exc,
+            _safe_error(self.coordinator.api.base_url),
+            _safe_error(exc),
         )
         raise HomeAssistantError(
-            f"Camera TTS failed: camera={self._camera_id}, action={action}: {exc}"
+            f"Camera TTS failed: camera={self._camera_id}, action={action}: {_safe_error(exc)}"
         ) from exc
 
     @staticmethod
@@ -284,12 +295,24 @@ class CameraTTSMediaPlayer(CameraTTSEntity, MediaPlayerEntity):
 
     async def async_set_volume_level(self, volume: float) -> None:
         """Set speaker volume using the backend's local hardware/software adapter."""
-        level = max(0.0, min(float(volume), 1.0))
+        try:
+            level = float(volume)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise HomeAssistantError("Camera TTS volume must be a finite number") from exc
+        if not math.isfinite(level):
+            raise HomeAssistantError("Camera TTS volume must be a finite number")
+        level = max(0.0, min(level, 1.0))
         try:
             payload = await self.coordinator.api.async_set_volume(self._camera_id, level)
         except CameraTTSAPIError as exc:
             self._raise_api_error(exc, action="set_volume")
-        actual = float(payload.get("volume_level", level))
+        try:
+            actual = float(payload.get("volume_level", level))
+        except (ValueError, TypeError, OverflowError):
+            actual = level
+        if not math.isfinite(actual):
+            actual = level
+        actual = max(0.0, min(actual, 1.0))
         if actual > 0:
             self._last_nonzero_volume = actual
         self.coordinator.async_mark_volume(

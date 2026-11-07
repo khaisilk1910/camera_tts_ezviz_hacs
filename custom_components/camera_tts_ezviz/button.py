@@ -12,14 +12,7 @@ from .api import CameraTTSAPIError
 from .coordinator import CameraTTSCoordinator
 from .entity import CameraTTSEntity
 
-_BUTTONS = {
-    "left": "PTZ left",
-    "right": "PTZ right",
-    "up": "PTZ up",
-    "down": "PTZ down",
-    "zoom_in": "PTZ zoom in",
-    "zoom_out": "PTZ zoom out",
-}
+_BUTTONS = ("left", "right", "up", "down", "zoom_in", "zoom_out")
 
 
 async def async_setup_entry(
@@ -48,9 +41,9 @@ async def async_setup_entry(
         new_ptz = sorted(ptz_ids - ptz_known)
         ptz_known.update(new_ptz)
         entities.extend(
-            CameraTTSPTZButton(coordinator, entry, camera_id, direction, name)
+            CameraTTSPTZButton(coordinator, entry, camera_id, direction)
             for camera_id in new_ptz
-            for direction, name in _BUTTONS.items()
+            for direction in _BUTTONS
         )
         if entities:
             async_add_entities(entities)
@@ -86,12 +79,23 @@ class CameraTTSPTZButton(CameraTTSEntity, ButtonEntity):
         entry: ConfigEntry,
         camera_id: str,
         direction: str,
-        name: str,
     ) -> None:
         super().__init__(coordinator, entry, camera_id)
         self._direction = direction
-        self._attr_name = name
+        self._attr_translation_key = f"ptz_{direction}"
+        self._attr_icon = {
+            "left": "mdi:arrow-left-bold",
+            "right": "mdi:arrow-right-bold",
+            "up": "mdi:arrow-up-bold",
+            "down": "mdi:arrow-down-bold",
+            "zoom_in": "mdi:magnify-plus-outline",
+            "zoom_out": "mdi:magnify-minus-outline",
+        }.get(direction, "mdi:camera-control")
         self._attr_unique_id = f"{entry.entry_id}_{camera_id}_ptz_{direction}"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.has_ptz
 
     async def async_press(self) -> None:
         try:

@@ -64,7 +64,64 @@
     "button": {
       "stop_playback": {
         "name": "Stop playback"
+      },
+      "ptz_left": {
+        "name": "PTZ left"
+      },
+      "ptz_right": {
+        "name": "PTZ right"
+      },
+      "ptz_up": {
+        "name": "PTZ up"
+      },
+      "ptz_down": {
+        "name": "PTZ down"
+      },
+      "ptz_zoom_in": {
+        "name": "PTZ zoom in"
+      },
+      "ptz_zoom_out": {
+        "name": "PTZ zoom out"
       }
+    },
+    "select": {
+      "pipeline": {
+        "name": "Assist pipeline"
+      },
+      "vad_sensitivity": {
+        "name": "Voice activity sensitivity"
+      }
+    },
+    "assist_satellite": {
+      "assist_satellite": {
+        "name": "Assist satellite"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Camera TTS options",
+        "description": "Customize idle polling and automatic Assist listening. Saving reloads the integration.",
+        "data": {
+          "poll_interval": "Idle polling interval (seconds)",
+          "assist_auto_listen": "Automatically listen for Assist"
+        },
+        "data_description": {
+          "poll_interval": "10–120 seconds; active playback still updates more frequently.",
+          "assist_auto_listen": "Disable to avoid starting RTSP/ffmpeg automatically. Assist announcements still work."
+        }
+      }
+    }
+  },
+  "services": {
+    "ptz": {
+      "name": "Move camera PTZ",
+      "description": "Move or zoom a camera through the local Docker backend."
+    },
+    "get_intercom_source": {
+      "name": "Get two-way talk source",
+      "description": "Return the go2rtc backchannel source."
     }
   }
 }

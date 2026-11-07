@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from homeassistant.components.number import NumberEntity, NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfSoundPressure
@@ -73,7 +75,13 @@ class CameraTTSGainNumber(CameraTTSEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         value = (self.camera_data or {}).get("gain_db")
-        return float(value) if value is not None else None
+        if value is None:
+            return None
+        try:
+            converted = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return converted if math.isfinite(converted) else None
 
     async def async_set_native_value(self, value: float) -> None:
         try:
@@ -82,14 +90,21 @@ class CameraTTSGainNumber(CameraTTSEntity, NumberEntity):
             raise HomeAssistantError(
                 f"Unable to set speaker gain for {self._camera_id}: {exc}"
             ) from exc
+        try:
+            actual = float(payload.get("gain_db", value))
+        except (TypeError, ValueError, OverflowError):
+            actual = float(value)
         self.coordinator.async_mark_gain(
-            self._camera_id,
-            float(payload.get("gain_db", value)),
+            self._camera_id, actual if math.isfinite(actual) else float(value)
         )
 
 
 class CameraTTSMicGainNumber(CameraTTSEntity, RestoreNumber):
     """Microphone gain used by the ffmpeg Assist capture path."""
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.has_microphone
 
     _attr_translation_key = "mic_gain"
     _attr_native_min_value = 0.0
